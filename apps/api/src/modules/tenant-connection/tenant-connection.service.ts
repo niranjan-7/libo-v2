@@ -1,84 +1,119 @@
-import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, UnauthorizedException, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
-
-export interface TenantConnectionConfig {
-  organizationId: string;
-  databaseKey: string;
-  host: string;
-  port: number;
-  databaseName: string;
-  username?: string;
-  password?: string;
-}
+import { TenantDatabaseRegistryService } from '../control-plane/tenant-database-registry.service';
+import { InitialTenantSchema1700000000001 } from '../../database/tenant/migrations/1700000000001-InitialTenantSchema';
 
 @Injectable()
 export class TenantConnectionService implements OnApplicationShutdown {
   private readonly logger = new Logger(TenantConnectionService.name);
-  private readonly tenantPools = new Map<string, DataSource>();
+  private readonly tenantPools = new Map<string, { dataSource: DataSource; lastAccessed: number }>();
+  private readonly MAX_POOLS = 50;
+  private readonly IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly registryService: TenantDatabaseRegistryService,
+  ) {}
 
   /**
-   * Retrieves or initializes a DataSource for a specific tenant organization
+   * Resolves a tenant DataSource safely using organization ID.
+   * Never accepts raw database names or connection strings from the client.
    */
-  async getTenantDataSource(config: TenantConnectionConfig): Promise<DataSource> {
-    const existingPool = this.tenantPools.get(config.organizationId);
-    if (existingPool && existingPool.isInitialized) {
-      return existingPool;
+  async getTenantConnection(organizationId: string): Promise<DataSource> {
+    const now = Date.now();
+    const existing = this.tenantPools.get(organizationId);
+
+    if (existing && existing.dataSource.isInitialized) {
+      existing.lastAccessed = now;
+      return existing.dataSource;
     }
 
-    this.logger.log(`Initializing tenant database pool for org: ${config.organizationId} (${config.databaseName})`);
+    // 1. Verify organization registry status in Control Plane
+    const registry = await this.registryService.getRegistryEntry(organizationId);
+    if (!registry) {
+      throw new NotFoundException(`No tenant database found for organization ${organizationId}`);
+    }
 
-    const tenantDataSource = new DataSource({
+    if (registry.status !== 'HEALTHY') {
+      throw new UnauthorizedException(`Tenant database for organization ${organizationId} is currently ${registry.status}`);
+    }
+
+    // 2. Enforce LRU cache boundary
+    if (this.tenantPools.size >= this.MAX_POOLS) {
+      await this.evictOldestPool();
+    }
+
+    this.logger.log(`Opening pooled connection for tenant database: ${registry.database_name}`);
+
+    // 3. Connect to isolated tenant database
+    const dataSource = new DataSource({
       type: 'postgres',
-      host: config.host || this.configService.get<string>('TENANT_DB_HOST', 'localhost'),
-      port: config.port || Number(this.configService.get<number>('TENANT_DB_PORT', 5432)),
-      username: config.username || this.configService.get<string>('TENANT_DB_USER', 'postgres'),
-      password: config.password || this.configService.get<string>('TENANT_DB_PASSWORD', 'postgres'),
-      database: config.databaseName,
-      entities: [], // Populated as tenant modules are registered in Milestone 2
-      migrations: [],
-      synchronize: false,
+      host: registry.host,
+      port: registry.port,
+      username: this.configService.get<string>('TENANT_DB_USER', 'postgres'),
+      password: this.configService.get<string>('TENANT_DB_PASSWORD', 'postgres'),
+      database: registry.database_name,
+      migrations: [InitialTenantSchema1700000000001],
+      synchronize: false, // Strict requirement: no synchronize in production
       logging: false,
       extra: {
         min: 1,
         max: 10,
-        idleTimeoutMillis: 600000, // 10 minutes idle eviction
+        idleTimeoutMillis: this.IDLE_TIMEOUT_MS,
       },
     });
 
-    await tenantDataSource.initialize();
-    this.tenantPools.set(config.organizationId, tenantDataSource);
-    return tenantDataSource;
+    await dataSource.initialize();
+    this.tenantPools.set(organizationId, { dataSource, lastAccessed: now });
+    return dataSource;
   }
 
   /**
-   * Gracefully destroys and evicts an idle tenant connection pool
+   * Evicts the least-recently-accessed tenant database pool
    */
-  async evictTenantPool(organizationId: string): Promise<void> {
-    const pool = this.tenantPools.get(organizationId);
-    if (pool) {
-      if (pool.isInitialized) {
-        await pool.destroy();
+  private async evictOldestPool(): Promise<void> {
+    let oldestOrgId: string | null = null;
+    let oldestTime = Infinity;
+
+    for (const [orgId, entry] of this.tenantPools.entries()) {
+      if (entry.lastAccessed < oldestTime) {
+        oldestTime = entry.lastAccessed;
+        oldestOrgId = orgId;
       }
-      this.tenantPools.delete(organizationId);
-      this.logger.log(`Evicted tenant pool for org: ${organizationId}`);
+    }
+
+    if (oldestOrgId) {
+      await this.closeTenantPool(oldestOrgId);
     }
   }
 
   /**
-   * Shuts down all active tenant pools on application termination
+   * Gracefully shuts down and removes an active tenant connection pool
+   */
+  async closeTenantPool(organizationId: string): Promise<void> {
+    const entry = this.tenantPools.get(organizationId);
+    if (entry) {
+      if (entry.dataSource.isInitialized) {
+        await entry.dataSource.destroy();
+      }
+      this.tenantPools.delete(organizationId);
+      this.logger.log(`Closed tenant connection pool for org: ${organizationId}`);
+    }
+  }
+
+  /**
+   * Shuts down all active tenant pools on application shutdown
    */
   async onApplicationShutdown(): Promise<void> {
-    this.logger.log(`Draining ${this.tenantPools.size} active tenant database pools...`);
-    for (const [orgId, pool] of this.tenantPools.entries()) {
+    this.logger.log(`Closing ${this.tenantPools.size} active tenant pools...`);
+    for (const [orgId, entry] of this.tenantPools.entries()) {
       try {
-        if (pool.isInitialized) {
-          await pool.destroy();
+        if (entry.dataSource.isInitialized) {
+          await entry.dataSource.destroy();
         }
       } catch (err: any) {
-        this.logger.error(`Error closing pool for org ${orgId}: ${err?.message}`);
+        this.logger.error(`Error destroying pool for org ${orgId}: ${err?.message}`);
       }
     }
     this.tenantPools.clear();

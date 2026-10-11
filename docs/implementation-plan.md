@@ -30,9 +30,27 @@ The implementation follows a production-minded incremental sequence covering the
   - `npm run test`: Passed across all packages with unit test coverage on `HealthService` (3 tests passed, exit code 0).
   - `npm run lint`: Passed across all workspaces (exit code 0).
 
+
+### Milestone 2: Multi-Tenant Database Foundation & Isolation Engine
+- **Status:** COMPLETED & VERIFIED
+- **Implemented Artifacts:**
+  - `apps/api/src/database/control-plane/migrations/1700000000000-InitialControlPlane.ts`: 6 control plane tables (`users`, `organizations`, `org_memberships`, `org_invitations`, `tenant_database_registry`, `control_plane_audit_logs`).
+  - `apps/api/src/database/tenant/migrations/1700000000001-InitialTenantSchema.ts`: Complete tenant schema comprising 31 tables across all 5 domains, with unique constraints, partial indexes, and race-safe `check_library_limit()` trigger using `pg_advisory_xact_lock`.
+  - `TenantDatabaseRegistryService`: Safe database provisioning (`tenant_<slug>_<idPrefix>`), automated migration execution, and fleet runner.
+  - `TenantConnectionService`: Dynamic pooled DataSource manager with bounded LRU cache (50 pools), 10-minute idle eviction, and safe organization ID resolution.
+  - `ControlPlaneModule`: Global NestJS module providing registry and repository access.
+- **Validation Commands Executed & Passed:**
+  - `npm run migration:run --workspace=@library/api`: Applied Control-Plane migration to `control_plane_db`.
+  - `npm run test:integration --workspace=@library/api`: 4/4 integration tests passed:
+    1. Provision separate tenant databases and apply migrations reproducibly.
+    2. Strict tenant isolation (Library created in Tenant Alpha is completely invisible in Tenant Beta).
+    3. Rejection of unmapped/unregistered organization IDs.
+    4. Race-safe enforcement of maximum 3 libraries per organization (4th attempt rejected, concurrent simultaneous attempts all blocked).
+  - `npm run typecheck`, `npm run build`, `npm run test`: All passed with exit code 0.
+
 ---
 
-### Milestone 2: Book Catalog, Location Hierarchy & Physical Barcodes
+### Milestone 3: Book Catalog, Location Hierarchy & Physical Barcodes
 - **Status:** Queued
 - **Intended Files:** `CatalogModule` (Books, Editions, Authors, Categories), `InventoryModule` (Floors, Locations, Copies).
 - **Acceptance Criteria:**
