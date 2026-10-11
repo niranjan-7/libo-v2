@@ -1,0 +1,25 @@
+{
+  "name": "library-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant Library Platform with isolated tenant databases and social reading layer",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces",
+    "dev:api": "npm run dev --workspace=@library/api",
+    "dev:web": "npm run dev --workspace=@library/web",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "db:reset": "docker compose -f infra/docker-compose.yml down -v && docker compose -f infra/docker-compose.yml up -d"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}

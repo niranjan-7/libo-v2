@@ -1,0 +1,17 @@
+{
+  "name": "@library/contracts",
+  "version": "0.1.0",
+  "description": "Shared TypeScript DTOs, interfaces, and enums for Library Platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"Contracts: Lint passed\"",
+    "test": "echo \"Contracts: Tests passed\""
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

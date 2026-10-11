@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: library_platform_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${CONTROL_PLANE_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${CONTROL_PLANE_DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${CONTROL_PLANE_DB_NAME:-control_plane_db}
+    ports:
+      - "${CONTROL_PLANE_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d control_plane_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    name: library_platform_pgdata

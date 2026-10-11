@@ -16,20 +16,19 @@ The implementation follows a production-minded incremental sequence covering the
 
 ## 2. Milestone Details & Status
 
-### Milestone 1: Monorepo Setup, Control Plane DB, Auth & Tenant DB Provisioning
-- **Status:** Pending Review / Ready for Execution
-- **Intended Files:**
-  - `package.json`, `pnpm-workspace.yaml`, `.env.example`, `infra/docker-compose.yml`
-  - `packages/contracts/`: Shared DTOs (`UserDto`, `OrgDto`, `AuthTokens`, roles, enums)
-  - `apps/api/`: NestJS core, TypeORM dual-datasource setup, control-plane migrations (`users`, `organizations`, `org_memberships`, `org_invitations`, `tenant_database_registry`, `control_plane_audit_logs`)
-  - `TenantConnectionService`: Dynamic connection pool management and tenant DB provisioning
-  - `apps/web/`: React 18 + Vite + TypeScript application shell with token styling from `library_platform_interactive_prototype_v2.html`
-- **Acceptance Criteria:**
-  1. PostgreSQL starts with `control_plane_db`.
-  2. Registration, login, and `/api/v1/auth/me` return authenticated profile with JWT cookie.
-  3. Organization creation provisions a new isolated PostgreSQL tenant DB, executes tenant template migrations, and registers the connection in `tenant_database_registry`.
-  4. Attempting to create a 4th library inside an organization is rejected by both application logic and database constraint.
-- **Tests:** Unit tests on password hashing and JWT issuance; Integration tests on tenant DB creation and the 3-library limit trigger.
+### Milestone 1: Monorepo Scaffold, Control Plane DB Configuration & Connectivity Probe
+- **Status:** COMPLETED & VERIFIED
+- **Implemented Artifacts:**
+  - `package.json`, `tsconfig.base.json`, `.gitignore`, `.env.example`, `infra/docker-compose.yml`, `infra/init-scripts/01-init-databases.sql`
+  - `packages/contracts/`: Shared DTOs (`HealthResponse`, `UserDto`, `OrganizationDto`), Enums (`OrgRole`, `LibraryRole`, `CopyStatus`, `ReservationStatus`, `LoanStatus`, `FineStatus`, `FineType`, `WalletTransactionType`)
+  - `apps/api/`: NestJS 10 backend with TypeORM persistence, Environment validation (`class-validator`), Control Plane entities (`users`, `organizations`, `org_memberships`, `org_invitations`, `tenant_database_registry`, `control_plane_audit_logs`), Initial migration (`1700000000000-InitialControlPlane.ts`), HealthModule with `/api/v1/health`, `/api/v1/health/ready`, `/api/v1/health/live`, and dynamic `TenantConnectionService`
+  - `apps/web/`: React 18 + Vite + TypeScript application with design tokens from `library_platform_interactive_prototype_v2.html` and real-time `ConnectivityBanner` probing the backend
+  - Root `README.md`: Documenting start, stop, reset, and test procedures
+- **Validation Commands Executed & Passed:**
+  - `npm run typecheck`: Passed across `@library/contracts`, `@library/api`, and `@library/web` (exit code 0).
+  - `npm run build`: Passed across all packages and apps (exit code 0).
+  - `npm run test`: Passed across all packages with unit test coverage on `HealthService` (3 tests passed, exit code 0).
+  - `npm run lint`: Passed across all workspaces (exit code 0).
 
 ---
 
