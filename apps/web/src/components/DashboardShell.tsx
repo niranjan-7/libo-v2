@@ -29,6 +29,7 @@ import {
   Barcode,
   ArrowRightLeft,
   Bell,
+  FolderHeart,
 } from 'lucide-react';
 import { CreateOrgModal } from './CreateOrgModal';
 import { CreateLibraryModal } from './CreateLibraryModal';
@@ -42,6 +43,7 @@ import { FloorPlanScreen } from './locations/FloorPlanScreen';
 import { InventoryScreen } from './inventory/InventoryScreen';
 import { CirculationDeskScreen } from './circulation/CirculationDeskScreen';
 import { ReaderCirculationScreen } from './circulation/ReaderCirculationScreen';
+import { CommunityScreen } from './community/CommunityScreen';
 
 const SAMPLE_OVERVIEW_BOOKS: BookItem[] = [
   {
@@ -102,7 +104,7 @@ export const DashboardShell: React.FC = () => {
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'catalog' | 'inventory' | 'circulation' | 'my-circulation' | 'map' | 'analytics' | 'settings' | 'members' | 'showcase'
+    'overview' | 'catalog' | 'inventory' | 'circulation' | 'my-circulation' | 'community' | 'map' | 'analytics' | 'settings' | 'members' | 'showcase'
   >('overview');
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
   const [selectedRackCode, setSelectedRackCode] = useState<string | null>('A');
@@ -118,6 +120,19 @@ export const DashboardShell: React.FC = () => {
   // Live Notifications
   const [notifications, setNotifications] = useState<NotificationDto[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  // Check URL parameters for shared deep links
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sharedCollectionId = params.get('collectionId');
+    const sharedBookId = params.get('bookId');
+    if (sharedCollectionId) {
+      setActiveTab('community');
+    } else if (sharedBookId) {
+      setSelectedBookId(sharedBookId);
+      setActiveTab('catalog');
+    }
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
     if (!currentOrg || !currentLibrary) return;
@@ -259,10 +274,20 @@ export const DashboardShell: React.FC = () => {
           </button>
 
           <button
+            onClick={() => { setActiveTab('community'); setIsMobileOpen(false); }}
+            className={`side-nav-item ${activeTab === 'community' ? 'active' : ''}`}
+          >
+            <span className="nav-number">{canManageLibraries ? '06' : '05'}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FolderHeart size={16} /> Community & Collections
+            </span>
+          </button>
+
+          <button
             onClick={() => { setActiveTab('map'); setIsMobileOpen(false); }}
             className={`side-nav-item ${activeTab === 'map' ? 'active' : ''}`}
           >
-            <span className="nav-number">{canManageLibraries ? '06' : '05'}</span>
+            <span className="nav-number">{canManageLibraries ? '07' : '06'}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <MapPin size={16} /> Floor Map & Zones
             </span>
@@ -273,7 +298,7 @@ export const DashboardShell: React.FC = () => {
               onClick={() => { setActiveTab('analytics'); setIsMobileOpen(false); }}
               className={`side-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
             >
-              <span className="nav-number">07</span>
+              <span className="nav-number">08</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <BarChart3 size={16} /> Analytics & Reports
               </span>
@@ -285,7 +310,7 @@ export const DashboardShell: React.FC = () => {
               onClick={() => { setActiveTab('members'); setIsMobileOpen(false); }}
               className={`side-nav-item ${activeTab === 'members' ? 'active' : ''}`}
             >
-              <span className="nav-number">08</span>
+              <span className="nav-number">09</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users size={16} /> Members & Invites
               </span>
@@ -297,7 +322,7 @@ export const DashboardShell: React.FC = () => {
               onClick={() => { setActiveTab('settings'); setIsMobileOpen(false); }}
               className={`side-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
             >
-              <span className="nav-number">09</span>
+              <span className="nav-number">10</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Settings size={16} /> Branch Settings
               </span>
@@ -588,6 +613,13 @@ export const DashboardShell: React.FC = () => {
             <ReaderCirculationScreen
               onBrowseCatalog={() => {
                 setSelectedBookId(null);
+                setActiveTab('catalog');
+              }}
+            />
+          ) : activeTab === 'community' ? (
+            <CommunityScreen
+              onSelectBook={(id) => {
+                setSelectedBookId(id);
                 setActiveTab('catalog');
               }}
             />

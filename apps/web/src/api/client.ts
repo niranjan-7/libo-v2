@@ -33,6 +33,22 @@ import {
   NotificationDto,
   SystemAuditLogDto,
   JobRunResultDto,
+  ReviewDto,
+  CreateReviewRequest,
+  VoteReviewRequest,
+  ReviewCommentDto,
+  CreateReviewCommentRequest,
+  ModerateReviewRequest,
+  ReviewPolicyConfigDto,
+  ReviewEligibilityDto,
+  CollectionDto,
+  CreateCollectionRequest,
+  UpdateCollectionRequest,
+  BadgeDto,
+  ReaderBadgeDto,
+  AwardBadgeRequest,
+  SharedCollectionResponse,
+  SharedReviewResponse,
 } from '@library/contracts';
 
 const API_BASE = '/api/v1';
@@ -517,4 +533,160 @@ export const api = {
       return request(`/organizations/${orgId}/libraries/${libraryId}/jobs/status`);
     },
   },
+  community: {
+    getPolicy: async (orgId: string, libraryId?: string): Promise<ReviewPolicyConfigDto> => {
+      const q = libraryId ? `?libraryId=${libraryId}` : '';
+      return request(`/organizations/${orgId}/community/policy${q}`);
+    },
+    updatePolicy: async (
+      orgId: string,
+      libraryId: string,
+      dto: { requireBorrowHistory?: boolean; minAccountAgeDays?: number },
+    ): Promise<ReviewPolicyConfigDto> => {
+      return request(`/organizations/${orgId}/community/policy?libraryId=${libraryId}`, {
+        method: 'PUT',
+        body: JSON.stringify(dto),
+      });
+    },
+    checkEligibility: async (
+      orgId: string,
+      bookId: string,
+      libraryId?: string,
+    ): Promise<ReviewEligibilityDto> => {
+      const q = libraryId ? `&libraryId=${libraryId}` : '';
+      return request(`/organizations/${orgId}/community/reviews/eligibility?bookId=${bookId}${q}`);
+    },
+    getReviewsForBook: async (orgId: string, bookId: string): Promise<ReviewDto[]> => {
+      return request(`/organizations/${orgId}/community/reviews/book/${bookId}`);
+    },
+    createReview: async (
+      orgId: string,
+      body: CreateReviewRequest & { libraryId?: string },
+    ): Promise<ReviewDto> => {
+      return request(`/organizations/${orgId}/community/reviews`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    voteReview: async (
+      orgId: string,
+      reviewId: string,
+      vote: 1 | -1 | 0,
+    ): Promise<{ upvotesCount: number; downvotesCount: number; score: number; userVote: number }> => {
+      return request(`/organizations/${orgId}/community/reviews/${reviewId}/vote`, {
+        method: 'POST',
+        body: JSON.stringify({ vote }),
+      });
+    },
+    moderateReview: async (
+      orgId: string,
+      reviewId: string,
+      body: ModerateReviewRequest,
+    ): Promise<ReviewDto> => {
+      return request(`/organizations/${orgId}/community/reviews/${reviewId}/moderate`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+    },
+    createComment: async (
+      orgId: string,
+      reviewId: string,
+      body: CreateReviewCommentRequest,
+    ): Promise<ReviewCommentDto> => {
+      return request(`/organizations/${orgId}/community/reviews/${reviewId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    getComments: async (orgId: string, reviewId: string): Promise<ReviewCommentDto[]> => {
+      return request(`/organizations/${orgId}/community/reviews/${reviewId}/comments`);
+    },
+    getCollections: async (orgId: string): Promise<CollectionDto[]> => {
+      return request(`/organizations/${orgId}/community/collections`);
+    },
+    createCollection: async (
+      orgId: string,
+      body: CreateCollectionRequest,
+    ): Promise<CollectionDto> => {
+      return request(`/organizations/${orgId}/community/collections`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    getCollectionDetails: async (orgId: string, collectionId: string): Promise<CollectionDto> => {
+      return request(`/organizations/${orgId}/community/collections/${collectionId}`);
+    },
+    updateCollection: async (
+      orgId: string,
+      collectionId: string,
+      body: UpdateCollectionRequest,
+    ): Promise<CollectionDto> => {
+      return request(`/organizations/${orgId}/community/collections/${collectionId}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+    },
+    addBookToCollection: async (
+      orgId: string,
+      collectionId: string,
+      bookId: string,
+    ): Promise<CollectionDto> => {
+      return request(`/organizations/${orgId}/community/collections/${collectionId}/books`, {
+        method: 'POST',
+        body: JSON.stringify({ bookId }),
+      });
+    },
+    removeBookFromCollection: async (
+      orgId: string,
+      collectionId: string,
+      bookId: string,
+    ): Promise<CollectionDto> => {
+      return request(`/organizations/${orgId}/community/collections/${collectionId}/books/${bookId}`, {
+        method: 'DELETE',
+      });
+    },
+    reorderCollectionBooks: async (
+      orgId: string,
+      collectionId: string,
+      bookIds: string[],
+    ): Promise<CollectionDto> => {
+      return request(`/organizations/${orgId}/community/collections/${collectionId}/reorder`, {
+        method: 'PUT',
+        body: JSON.stringify({ bookIds }),
+      });
+    },
+    deleteCollection: async (orgId: string, collectionId: string): Promise<void> => {
+      await request(`/organizations/${orgId}/community/collections/${collectionId}`, {
+        method: 'DELETE',
+      });
+    },
+    getBadges: async (orgId: string): Promise<BadgeDto[]> => {
+      return request(`/organizations/${orgId}/community/badges`);
+    },
+    getMyBadges: async (orgId: string): Promise<ReaderBadgeDto[]> => {
+      return request(`/organizations/${orgId}/community/badges/my`);
+    },
+    getUserBadges: async (orgId: string, userId: string): Promise<ReaderBadgeDto[]> => {
+      return request(`/organizations/${orgId}/community/badges/user/${userId}`);
+    },
+    awardBadge: async (orgId: string, body: AwardBadgeRequest): Promise<ReaderBadgeDto> => {
+      return request(`/organizations/${orgId}/community/badges/award`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    getDeepLinkCollection: async (
+      orgId: string,
+      collectionId: string,
+    ): Promise<SharedCollectionResponse> => {
+      return request(`/organizations/${orgId}/community/deep-link/collection/${collectionId}`);
+    },
+    getDeepLinkReview: async (
+      orgId: string,
+      reviewId: string,
+    ): Promise<SharedReviewResponse> => {
+      return request(`/organizations/${orgId}/community/deep-link/review/${reviewId}`);
+    },
+  },
 };
+

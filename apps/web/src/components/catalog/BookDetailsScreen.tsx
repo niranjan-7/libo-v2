@@ -1,12 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
-import { BookWorkDto } from '@library/contracts';
+import {
+  BookWorkDto,
+  ReviewDto,
+  ReviewCommentDto,
+  ReviewEligibilityDto,
+  ReviewStatus,
+  OrgRole,
+} from '@library/contracts';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { StatusBadge, Chip } from '../ui/Pill';
 import { LoadingState, ErrorState } from '../ui/StateIndicators';
 import { useToast } from '../ui/Toast';
+import { ReviewCard } from '../ui/ReviewCard';
 import {
   ArrowLeft,
   MapPin,
@@ -14,6 +22,12 @@ import {
   Barcode,
   Calendar,
   BookmarkPlus,
+  Star,
+  MessageSquare,
+  PenLine,
+  X,
+  Loader2,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface BookDetailsScreenProps {
@@ -27,12 +41,29 @@ export const BookDetailsScreen: React.FC<BookDetailsScreenProps> = ({
   onBack,
   onLocateOnMap,
 }) => {
-  const { currentOrg, currentLibrary } = useAuth();
+  const { currentOrg, currentLibrary, currentRole, user } = useAuth();
   const { showToast } = useToast();
   const [book, setBook] = useState<BookWorkDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reservingEditionId, setReservingEditionId] = useState<string | null>(null);
+
+  // Reviews & Community state
+  const [reviews, setReviews] = useState<ReviewDto[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(true);
+  const [eligibility, setEligibility] = useState<ReviewEligibilityDto | null>(null);
+  const [showWriteModal, setShowWriteModal] = useState<boolean>(false);
+  const [newRating, setNewRating] = useState<number>(5);
+  const [newTitle, setNewTitle] = useState<string>('');
+  const [newBody, setNewBody] = useState<string>('');
+  const [submittingReview, setSubmittingReview] = useState<boolean>(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  // Comments per review map
+  const [reviewComments, setReviewComments] = useState<Record<string, ReviewCommentDto[]>>({});
+  const [loadingCommentsMap, setLoadingCommentsMap] = useState<Record<string, boolean>>({});
+
+  const isStaff = currentRole === OrgRole.OWNER || currentRole === OrgRole.ADMIN;
 
   const handleReserveEdition = async (editionId: string, label: string) => {
     if (!currentOrg || !currentLibrary) return;
@@ -53,6 +84,135 @@ export const BookDetailsScreen: React.FC<BookDetailsScreenProps> = ({
       showToast(err.message || 'Failed to place reservation hold', 'error');
     } finally {
       setReservingEditionId(null);
+    }
+  };
+
+  const fetchReviewsAndEligibility = useCallback(async () => {
+    if (!currentOrg || !currentLibrary || !bookId) return;
+    setLoadingReviews(true);
+    try {
+      const [reviewList, elig] = await Promise.all([
+        api.community.getReviewsForBook(currentOrg.organization.organizationId, bookId),
+        api.community.checkEligibility(
+          currentOrg.organization.organizationId,
+          bookId,
+          currentLibrary.libraryId,
+        ),
+      ]);
+      setReviews(reviewList);
+      setEligibility(elig);
+    } catch {
+      // Non-blocking error
+    } finally {
+      setLoadingReviews(false);
+    }
+  }, [currentOrg, currentLibrary, bookId]);
+
+  useEffect(() => {
+    fetchReviewsAndEligibility();
+  }, [fetchReviewsAndEligibility]);
+
+  const handleVoteReview = async (reviewId: string, vote: 1 | -1 | 0) => {
+    if (!currentOrg) return;
+    const res = await api.community.voteReview(
+      currentOrg.organization.organizationId,
+      reviewId,
+      vote,
+    );
+    setReviews((prev) =>
+      prev.map((r) =>
+        r.reviewId === reviewId
+          ? {
+              ...r,
+              upvotesCount: res.upvotesCount,
+              downvotesCount: res.downvotesCount,
+              score: res.score,
+              userVote: res.userVote as any,
+            }
+          : r,
+      ),
+    );
+  };
+
+  const handleLoadComments = async (reviewId: string) => {
+    if (!currentOrg || loadingCommentsMap[reviewId]) return;
+    setLoadingCommentsMap((prev) => ({ ...prev, [reviewId]: true }));
+    try {
+      const list = await api.community.getComments(currentOrg.organization.organizationId, reviewId);
+      setReviewComments((prev) => ({ ...prev, [reviewId]: list }));
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load comments', 'error');
+    } finally {
+      setLoadingCommentsMap((prev) => ({ ...prev, [reviewId]: false }));
+    }
+  };
+
+  const handleAddComment = async (reviewId: string, text: string) => {
+    if (!currentOrg) return;
+    try {
+      const newComment = await api.community.createComment(
+        currentOrg.organization.organizationId,
+        reviewId,
+        { body: text },
+      );
+      setReviewComments((prev) => ({
+        ...prev,
+        [reviewId]: [...(prev[reviewId] || []), newComment],
+      }));
+      setReviews((prev) =>
+        prev.map((r) =>
+          r.reviewId === reviewId ? { ...r, commentsCount: r.commentsCount + 1 } : r,
+        ),
+      );
+      showToast('Comment posted successfully!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to post comment', 'error');
+      throw err;
+    }
+  };
+
+  const handleModerateReview = async (reviewId: string, status: ReviewStatus) => {
+    if (!currentOrg) return;
+    try {
+      const updated = await api.community.moderateReview(
+        currentOrg.organization.organizationId,
+        reviewId,
+        { status },
+      );
+      setReviews((prev) =>
+        prev.map((r) => (r.reviewId === reviewId ? { ...r, status: updated.status } : r)),
+      );
+      showToast(`Review status updated to ${status}`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update review status', 'error');
+    }
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentOrg || !currentLibrary || !newTitle.trim() || !newBody.trim()) return;
+
+    setSubmittingReview(true);
+    setReviewError(null);
+    try {
+      const created = await api.community.createReview(currentOrg.organization.organizationId, {
+        bookId,
+        libraryId: currentLibrary.libraryId,
+        rating: newRating,
+        title: newTitle.trim(),
+        body: newBody.trim(),
+      });
+      setReviews((prev) => [created, ...prev]);
+      setShowWriteModal(false);
+      setNewTitle('');
+      setNewBody('');
+      setNewRating(5);
+      showToast('Thank you! Your review has been published.', 'success');
+      fetchReviewsAndEligibility();
+    } catch (err: any) {
+      setReviewError(err.message || 'Failed to publish review');
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -375,6 +535,320 @@ export const BookDetailsScreen: React.FC<BookDetailsScreenProps> = ({
           </div>
         )}
       </div>
+
+      {/* 4. Community Reviews & Ratings Section */}
+      <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', margin: 0 }}>
+                Reader Reviews & Community Discussion
+              </h2>
+              {reviews.length > 0 && (
+                <span
+                  style={{
+                    background: 'var(--accent-soft)',
+                    color: 'var(--accent)',
+                    fontSize: '11px',
+                    fontWeight: 750,
+                    borderRadius: '999px',
+                    padding: '2px 8px',
+                  }}
+                >
+                  {reviews.length} {reviews.length === 1 ? 'Review' : 'Reviews'}
+                </span>
+              )}
+            </div>
+            <p style={{ color: 'var(--muted)', fontSize: '13px', margin: 0 }}>
+              Honest critiques and ratings from fellow library readers and curators.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {eligibility && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: eligibility.canReview ? 'var(--status-success-text)' : 'var(--muted)',
+                  fontWeight: 650,
+                }}
+              >
+                {eligibility.canReview
+                  ? 'Eligible to review'
+                  : eligibility.reason || 'Policy restricted'}
+              </span>
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              iconLeft={<PenLine size={14} />}
+              onClick={() => {
+                setReviewError(null);
+                setShowWriteModal(true);
+              }}
+              disabled={eligibility ? !eligibility.canReview : false}
+              title={eligibility?.reason}
+            >
+              Write Review
+            </Button>
+          </div>
+        </div>
+
+        {/* Reviews List */}
+        {loadingReviews ? (
+          <Card style={{ padding: '32px', textAlign: 'center' }}>
+            <LoadingState message="Loading reader reviews and ratings..." />
+          </Card>
+        ) : reviews.length === 0 ? (
+          <Card style={{ padding: '36px', textAlign: 'center' }}>
+            <div
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '12px',
+                background: 'var(--canvas)',
+                display: 'inline-grid',
+                placeItems: 'center',
+                color: 'var(--muted)',
+                marginBottom: '12px',
+              }}
+            >
+              <MessageSquare size={20} />
+            </div>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 6px' }}>No reviews yet</h3>
+            <p style={{ color: 'var(--muted)', fontSize: '13px', margin: '0 0 16px', maxWidth: '380px', marginInline: 'auto' }}>
+              Be the first reader to share your thoughts, critique, and rating for this work!
+            </p>
+            {eligibility?.canReview && (
+              <Button
+                variant="secondary"
+                size="sm"
+                iconLeft={<PenLine size={13} />}
+                onClick={() => setShowWriteModal(true)}
+              >
+                Share Your Review
+              </Button>
+            )}
+          </Card>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {reviews.map((rev) => (
+              <ReviewCard
+                key={rev.reviewId}
+                review={{
+                  id: rev.reviewId,
+                  title: rev.title,
+                  author: rev.authorName,
+                  excerpt: rev.body,
+                  rating: rev.rating,
+                  status: rev.status,
+                  initialUpvotes: rev.upvotesCount,
+                  initialDownvotes: rev.downvotesCount,
+                  initialUserVote: rev.userVote as any,
+                  commentsCount: rev.commentsCount,
+                  createdAt: rev.createdAt,
+                }}
+                currentUserId={user?.userId}
+                isStaff={isStaff}
+                onVote={handleVoteReview}
+                onComment={handleLoadComments}
+                onAddComment={handleAddComment}
+                onModerate={handleModerateReview}
+                comments={reviewComments[rev.reviewId]}
+                isLoadingComments={loadingCommentsMap[rev.reviewId]}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Write Review Modal Dialog */}
+      {showWriteModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.55)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 100,
+            padding: '16px',
+            backdropFilter: 'blur(4px)',
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="write-review-title"
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '20px',
+              padding: '28px',
+              width: '100%',
+              maxWidth: '520px',
+              boxShadow: 'var(--shadow-lg)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    background: 'var(--accent-soft)',
+                    color: 'var(--accent)',
+                    display: 'grid',
+                    placeItems: 'center',
+                  }}
+                >
+                  <PenLine size={18} />
+                </div>
+                <div>
+                  <h3 id="write-review-title" style={{ margin: 0, fontSize: '17px', fontWeight: 750 }}>
+                    Write a Review
+                  </h3>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    Reviewing: <strong>{book.title}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setShowWriteModal(false)}
+                aria-label="Close review modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {reviewError && (
+              <div
+                style={{
+                  background: 'color-mix(in srgb, var(--status-danger-text) 10%, transparent)',
+                  border: '1px solid var(--status-danger-text)',
+                  color: 'var(--status-danger-text)',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                }}
+              >
+                {reviewError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitReview} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Star Rating Selector */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 650, marginBottom: '6px' }}>
+                  Your Rating
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setNewRating(star)}
+                      aria-label={`${star} star rating`}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px',
+                      }}
+                    >
+                      <Star
+                        size={24}
+                        fill={star <= newRating ? '#f59e0b' : 'none'}
+                        stroke={star <= newRating ? '#f59e0b' : 'var(--muted)'}
+                      />
+                    </button>
+                  ))}
+                  <span style={{ fontSize: '13px', fontWeight: 700, marginLeft: '8px', color: 'var(--text)' }}>
+                    {newRating}.0 / 5.0
+                  </span>
+                </div>
+              </div>
+
+              {/* Review Headline / Title */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 650, marginBottom: '6px' }}>
+                  Review Headline
+                </label>
+                <input
+                  type="text"
+                  required
+                  maxLength={255}
+                  placeholder="e.g. A thrilling exploration of human resilience"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--canvas)',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              {/* Review Body */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 650, marginBottom: '6px' }}>
+                  Your Detailed Critique
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="Share what you liked, pacing, style, and who should read this work..."
+                  value={newBody}
+                  onChange={(e) => setNewBody(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--canvas)',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    outline: 'none',
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              {/* Footer Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => setShowWriteModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={submittingReview || !newTitle.trim() || !newBody.trim()}
+                  iconLeft={submittingReview ? <Loader2 size={14} className="animate-spin" /> : undefined}
+                >
+                  {submittingReview ? 'Publishing...' : 'Publish Review'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

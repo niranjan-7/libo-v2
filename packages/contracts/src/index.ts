@@ -539,3 +539,146 @@ export interface JobRunResultDto {
   error?: string;
 }
 
+// ==========================================
+// 10. REVIEWS, COMMUNITY, COLLECTIONS & BADGES
+// ==========================================
+export type ReviewStatus = 'PUBLISHED' | 'FLAGGED' | 'HIDDEN';
+export type CollectionVisibility = 'PUBLIC' | 'PRIVATE' | 'UNLISTED';
+export type CollectionStatus = 'ACTIVE' | 'ARCHIVED';
+
+export interface ReviewDto {
+  reviewId: string;
+  bookId: string;
+  bookTitle?: string;
+  userId: string;
+  authorName: string;
+  rating: number; // 1 - 5
+  title: string;
+  body: string;
+  status: ReviewStatus;
+  createdAt: string;
+  updatedAt: string;
+  upvotesCount: number;
+  downvotesCount: number;
+  score: number;
+  userVote?: 1 | -1 | 0 | null;
+  commentsCount: number;
+}
+
+export interface CreateReviewRequest {
+  bookId: string;
+  rating: number;
+  title: string;
+  body: string;
+}
+
+export interface VoteReviewRequest {
+  vote: 1 | -1 | 0; // 1 = helpful / upvote, -1 = unhelpful / downvote, 0 = remove vote
+}
+
+export interface ReviewCommentDto {
+  commentId: string;
+  reviewId: string;
+  userId: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface CreateReviewCommentRequest {
+  body: string;
+}
+
+export interface ModerateReviewRequest {
+  status: ReviewStatus;
+  reason?: string;
+}
+
+export interface ReviewPolicyConfigDto {
+  requireBorrowHistory: boolean;
+  minAccountAgeDays: number;
+}
+
+export interface ReviewEligibilityDto {
+  canReview: boolean;
+  reason?: string;
+  policy: ReviewPolicyConfigDto;
+}
+
+export interface CollectionBookItemDto {
+  collectionId: string;
+  bookId: string;
+  position: number;
+  title: string;
+  subtitle?: string;
+  coverUrl?: string;
+  authors: AuthorDto[];
+  availableCopies: number;
+  totalCopies: number;
+}
+
+export interface CollectionDto {
+  collectionId: string;
+  creatorUserId: string;
+  creatorName?: string;
+  title: string;
+  description?: string | null;
+  visibility: CollectionVisibility;
+  status: CollectionStatus;
+  createdAt: string;
+  bookCount: number;
+  books?: CollectionBookItemDto[];
+}
+
+export interface CreateCollectionRequest {
+  title: string;
+  description?: string;
+  visibility?: CollectionVisibility;
+  initialBookIds?: string[];
+}
+
+export interface UpdateCollectionRequest {
+  title?: string;
+  description?: string;
+  visibility?: CollectionVisibility;
+  status?: CollectionStatus;
+}
+
+export interface ReorderCollectionBooksRequest {
+  bookIds: string[];
+}
+
+export interface BadgeDto {
+  badgeId: string;
+  code: string;
+  name: string;
+  description: string;
+  criteria?: Record<string, any>;
+}
+
+export interface ReaderBadgeDto {
+  userId: string;
+  badgeId: string;
+  code: string;
+  name: string;
+  description: string;
+  earnedAt: string;
+}
+
+export interface AwardBadgeRequest {
+  userId: string;
+  badgeCode: string;
+}
+
+export interface SharedCollectionResponse {
+  collection: CollectionDto;
+  isOwner: boolean;
+  accessLevel: 'OWNER' | 'PUBLIC' | 'UNLISTED';
+}
+
+export interface SharedReviewResponse {
+  review: ReviewDto;
+  bookTitle: string;
+  accessLevel: 'PUBLIC' | 'AUTHOR_OR_STAFF';
+}
+

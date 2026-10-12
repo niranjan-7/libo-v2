@@ -15,6 +15,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { WalletModule } from './modules/wallet/wallet.module';
 import { FinesModule } from './modules/fines/fines.module';
 import { BackgroundJobsModule } from './modules/jobs/background-jobs.module';
+import { CommunityModule } from './modules/community/community.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { BackgroundJobsModule } from './modules/jobs/background-jobs.module';
     WalletModule,
     FinesModule,
     BackgroundJobsModule,
+    CommunityModule,
     HealthModule,
   ],
 })
