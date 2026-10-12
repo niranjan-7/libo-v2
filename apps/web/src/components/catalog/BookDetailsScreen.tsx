@@ -6,12 +6,14 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { StatusBadge, Chip } from '../ui/Pill';
 import { LoadingState, ErrorState } from '../ui/StateIndicators';
+import { useToast } from '../ui/Toast';
 import {
   ArrowLeft,
   MapPin,
   Building,
   Barcode,
   Calendar,
+  BookmarkPlus,
 } from 'lucide-react';
 
 interface BookDetailsScreenProps {
@@ -26,9 +28,33 @@ export const BookDetailsScreen: React.FC<BookDetailsScreenProps> = ({
   onLocateOnMap,
 }) => {
   const { currentOrg, currentLibrary } = useAuth();
+  const { showToast } = useToast();
   const [book, setBook] = useState<BookWorkDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reservingEditionId, setReservingEditionId] = useState<string | null>(null);
+
+  const handleReserveEdition = async (editionId: string, label: string) => {
+    if (!currentOrg || !currentLibrary) return;
+    setReservingEditionId(editionId);
+    try {
+      const res = await api.circulation.createReservation(
+        currentOrg.organization.organizationId,
+        currentLibrary.libraryId,
+        { editionId },
+      );
+
+      if (res.status === 'ALLOCATED') {
+        showToast(`Hold placed for ${label}! An available physical copy has been allocated.`, 'success');
+      } else {
+        showToast(`Waitlisted for ${label}! You are #${res.queuePosition} in the reservation queue.`, 'info');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to place reservation hold', 'error');
+    } finally {
+      setReservingEditionId(null);
+    }
+  };
 
   useEffect(() => {
     if (!currentOrg || !currentLibrary || !bookId) return;
@@ -251,6 +277,18 @@ export const BookDetailsScreen: React.FC<BookDetailsScreenProps> = ({
                     <span>Publication Date: <strong>{new Date(ed.publicationDate).toLocaleDateString()}</strong></span>
                   </div>
                 )}
+              </div>
+
+              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  iconLeft={<BookmarkPlus size={14} />}
+                  onClick={() => handleReserveEdition(ed.editionId, ed.editionLabel)}
+                  disabled={reservingEditionId === ed.editionId}
+                >
+                  {reservingEditionId === ed.editionId ? 'Reserving...' : 'Place Hold'}
+                </Button>
               </div>
             </Card>
           ))}

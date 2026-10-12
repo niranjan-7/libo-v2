@@ -14,6 +14,14 @@ import {
   InventoryStatsResponse,
   FloorPlanResponse,
   RackDetailResponse,
+  CirculationPolicyDto,
+  LoanDto,
+  ReservationDto,
+  CheckoutRequest,
+  ReturnRequest,
+  CreateReservationRequest,
+  ReadyForPickupRequest,
+  CirculationDeskStatsResponse,
 } from '@library/contracts';
 
 const API_BASE = '/api/v1';
@@ -187,6 +195,153 @@ export const api = {
       rackCode: string,
     ): Promise<RackDetailResponse> => {
       return request<RackDetailResponse>(`/organizations/${orgId}/libraries/${libraryId}/locations/racks/${rackCode}/shelves`);
+    },
+  },
+  circulation: {
+    checkout: async (
+      orgId: string,
+      libraryId: string,
+      body: CheckoutRequest,
+    ): Promise<LoanDto> => {
+      return request<LoanDto>(`/organizations/${orgId}/libraries/${libraryId}/circulation/checkout`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    returnCopy: async (
+      orgId: string,
+      libraryId: string,
+      body: ReturnRequest,
+    ): Promise<{ loan?: LoanDto; copyStatus: string; nextReservation?: ReservationDto }> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/circulation/return`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    createReservation: async (
+      orgId: string,
+      libraryId: string,
+      body: CreateReservationRequest,
+    ): Promise<ReservationDto> => {
+      return request<ReservationDto>(`/organizations/${orgId}/libraries/${libraryId}/circulation/reservations`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    markReadyForPickup: async (
+      orgId: string,
+      libraryId: string,
+      reservationId: string,
+      body: ReadyForPickupRequest = {},
+    ): Promise<ReservationDto> => {
+      return request<ReservationDto>(
+        `/organizations/${orgId}/libraries/${libraryId}/circulation/reservations/${reservationId}/ready-for-pickup`,
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      );
+    },
+    cancelReservation: async (
+      orgId: string,
+      libraryId: string,
+      reservationId: string,
+    ): Promise<ReservationDto> => {
+      return request<ReservationDto>(
+        `/organizations/${orgId}/libraries/${libraryId}/circulation/reservations/${reservationId}/cancel`,
+        {
+          method: 'POST',
+        },
+      );
+    },
+    extendLoan: async (
+      orgId: string,
+      libraryId: string,
+      loanId: string,
+    ): Promise<LoanDto> => {
+      return request<LoanDto>(`/organizations/${orgId}/libraries/${libraryId}/circulation/loans/${loanId}/extend`, {
+        method: 'POST',
+      });
+    },
+    processExpiries: async (
+      orgId: string,
+      libraryId: string,
+    ): Promise<{ expiredCount: number; reassignedCount: number }> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/circulation/reservations/process-expiries`, {
+        method: 'POST',
+      });
+    },
+    getLoans: async (
+      orgId: string,
+      libraryId: string,
+      params?: { readerUserId?: string; status?: string; search?: string; limit?: number; offset?: number },
+    ): Promise<{ items: LoanDto[]; total: number }> => {
+      const q = new URLSearchParams();
+      if (params?.readerUserId) q.set('readerUserId', params.readerUserId);
+      if (params?.status) q.set('status', params.status);
+      if (params?.search) q.set('search', params.search);
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return request(`/organizations/${orgId}/libraries/${libraryId}/circulation/loans${qs}`);
+    },
+    getReservations: async (
+      orgId: string,
+      libraryId: string,
+      params?: { readerUserId?: string; editionId?: string; status?: string; limit?: number; offset?: number },
+    ): Promise<{ items: ReservationDto[]; total: number }> => {
+      const q = new URLSearchParams();
+      if (params?.readerUserId) q.set('readerUserId', params.readerUserId);
+      if (params?.editionId) q.set('editionId', params.editionId);
+      if (params?.status) q.set('status', params.status);
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return request(`/organizations/${orgId}/libraries/${libraryId}/circulation/reservations${qs}`);
+    },
+    getStats: async (
+      orgId: string,
+      libraryId: string,
+    ): Promise<CirculationDeskStatsResponse> => {
+      return request<CirculationDeskStatsResponse>(
+        `/organizations/${orgId}/libraries/${libraryId}/circulation/stats`,
+      );
+    },
+    getMyCirculation: async (
+      orgId: string,
+      libraryId: string,
+    ): Promise<{
+      activeLoans: LoanDto[];
+      reservations: ReservationDto[];
+      stats: {
+        activeLoansCount: number;
+        maxActiveLoans: number;
+        pendingReservationsCount: number;
+        maxPendingReservations: number;
+      };
+    }> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/circulation/my-circulation`);
+    },
+    getPolicy: async (
+      orgId: string,
+      libraryId: string,
+    ): Promise<CirculationPolicyDto> => {
+      return request<CirculationPolicyDto>(
+        `/organizations/${orgId}/libraries/${libraryId}/circulation/policy`,
+      );
+    },
+    updatePolicy: async (
+      orgId: string,
+      libraryId: string,
+      body: Partial<CirculationPolicyDto>,
+    ): Promise<CirculationPolicyDto> => {
+      return request<CirculationPolicyDto>(
+        `/organizations/${orgId}/libraries/${libraryId}/circulation/policy`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(body),
+        },
+      );
     },
   },
 };

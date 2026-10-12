@@ -9,6 +9,7 @@ import { TenantConnectionModule } from './modules/tenant-connection/tenant-conne
 import { AuthModule } from './modules/auth/auth.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
+import { CirculationModule } from './modules/circulation/circulation.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
     AuthModule,
     OrganizationsModule,
     CatalogModule,
+    CirculationModule,
     HealthModule,
   ],
 })

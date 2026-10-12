@@ -315,3 +315,90 @@ export interface InventoryStatsResponse {
   loanedCopies: number;
   exceptionsCount: number;
 }
+
+// ==========================================
+// 6. CIRCULATION, LOANS & RESERVATIONS
+// ==========================================
+export interface CirculationPolicyDto {
+  loanPeriodDays: number;
+  extensionIncrementDays: number;
+  maxExtensions: number;
+  maxActiveLoans: number;
+  maxPendingReservations: number;
+  pickupWindowHours: number;
+  currencyCode: string;
+  dailyOverdueFineRate: number;
+}
+
+export interface LoanDto {
+  loanId: string;
+  libraryId: string;
+  copyId: string;
+  readerUserId: string;
+  readerName?: string;
+  readerEmail?: string;
+  reservationId?: string | null;
+  barcode: string;
+  bookTitle: string;
+  authorName?: string;
+  editionLabel: string;
+  format: string;
+  checkedOutAt: string;
+  dueAt: string;
+  returnedAt?: string | null;
+  status: LoanStatus;
+  extensionCount: number;
+  isOverdue: boolean;
+  policySnapshot?: Record<string, any>;
+}
+
+export interface ReservationDto {
+  reservationId: string;
+  libraryId: string;
+  readerUserId: string;
+  readerName?: string;
+  readerEmail?: string;
+  editionId: string;
+  bookTitle: string;
+  authorName?: string;
+  editionLabel: string;
+  assignedCopyId?: string | null;
+  assignedBarcode?: string | null;
+  pickupLocationCode?: string | null;
+  status: ReservationStatus;
+  queuePosition?: number;
+  createdAt: string;
+  allocatedAt?: string | null;
+  readyAt?: string | null;
+  pickupDeadlineAt?: string | null;
+  fulfilledAt?: string | null;
+  cancelledAt?: string | null;
+}
+
+export interface CheckoutRequest {
+  barcode: string;
+  readerUserId: string;
+  reservationId?: string;
+}
+
+export interface ReturnRequest {
+  barcode: string;
+  condition?: CopyCondition;
+}
+
+export interface CreateReservationRequest {
+  editionId: string;
+  readerUserId?: string;
+}
+
+export interface ReadyForPickupRequest {
+  pickupLocationId?: string;
+}
+
+export interface CirculationDeskStatsResponse {
+  activeLoansCount: number;
+  overdueLoansCount: number;
+  readyForPickupCount: number;
+  pendingReservationsCount: number;
+}
+

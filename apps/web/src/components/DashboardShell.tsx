@@ -26,6 +26,7 @@ import {
   Menu,
   X,
   Barcode,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { CreateOrgModal } from './CreateOrgModal';
 import { CreateLibraryModal } from './CreateLibraryModal';
@@ -37,6 +38,8 @@ import { CatalogScreen } from './catalog/CatalogScreen';
 import { BookDetailsScreen } from './catalog/BookDetailsScreen';
 import { FloorPlanScreen } from './locations/FloorPlanScreen';
 import { InventoryScreen } from './inventory/InventoryScreen';
+import { CirculationDeskScreen } from './circulation/CirculationDeskScreen';
+import { ReaderCirculationScreen } from './circulation/ReaderCirculationScreen';
 
 const SAMPLE_OVERVIEW_BOOKS: BookItem[] = [
   {
@@ -97,7 +100,7 @@ export const DashboardShell: React.FC = () => {
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'catalog' | 'inventory' | 'circulation' | 'map' | 'analytics' | 'settings' | 'members' | 'showcase'
+    'overview' | 'catalog' | 'inventory' | 'circulation' | 'my-circulation' | 'map' | 'analytics' | 'settings' | 'members' | 'showcase'
   >('overview');
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
   const [selectedRackCode, setSelectedRackCode] = useState<string | null>('A');
@@ -181,11 +184,33 @@ export const DashboardShell: React.FC = () => {
             </span>
           </button>
 
+          {canManageLibraries && (
+            <button
+              onClick={() => { setActiveTab('circulation'); setIsMobileOpen(false); }}
+              className={`side-nav-item ${activeTab === 'circulation' ? 'active' : ''}`}
+            >
+              <span className="nav-number">04</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ArrowRightLeft size={16} /> Circulation Desk
+              </span>
+            </button>
+          )}
+
+          <button
+            onClick={() => { setActiveTab('my-circulation'); setIsMobileOpen(false); }}
+            className={`side-nav-item ${activeTab === 'my-circulation' ? 'active' : ''}`}
+          >
+            <span className="nav-number">{canManageLibraries ? '05' : '04'}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Clock size={16} /> My Loans & Holds
+            </span>
+          </button>
+
           <button
             onClick={() => { setActiveTab('map'); setIsMobileOpen(false); }}
             className={`side-nav-item ${activeTab === 'map' ? 'active' : ''}`}
           >
-            <span className="nav-number">04</span>
+            <span className="nav-number">{canManageLibraries ? '06' : '05'}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <MapPin size={16} /> Floor Map & Zones
             </span>
@@ -196,7 +221,7 @@ export const DashboardShell: React.FC = () => {
               onClick={() => { setActiveTab('analytics'); setIsMobileOpen(false); }}
               className={`side-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
             >
-              <span className="nav-number">05</span>
+              <span className="nav-number">07</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <BarChart3 size={16} /> Analytics & Reports
               </span>
@@ -208,7 +233,7 @@ export const DashboardShell: React.FC = () => {
               onClick={() => { setActiveTab('members'); setIsMobileOpen(false); }}
               className={`side-nav-item ${activeTab === 'members' ? 'active' : ''}`}
             >
-              <span className="nav-number">06</span>
+              <span className="nav-number">08</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users size={16} /> Members & Invites
               </span>
@@ -220,7 +245,7 @@ export const DashboardShell: React.FC = () => {
               onClick={() => { setActiveTab('settings'); setIsMobileOpen(false); }}
               className={`side-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
             >
-              <span className="nav-number">07</span>
+              <span className="nav-number">09</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Settings size={16} /> Branch Settings
               </span>
@@ -471,6 +496,15 @@ export const DashboardShell: React.FC = () => {
               onLocateRack={(rack) => {
                 setSelectedRackCode(rack);
                 setActiveTab('map');
+              }}
+            />
+          ) : activeTab === 'circulation' ? (
+            <CirculationDeskScreen />
+          ) : activeTab === 'my-circulation' ? (
+            <ReaderCirculationScreen
+              onBrowseCatalog={() => {
+                setSelectedBookId(null);
+                setActiveTab('catalog');
               }}
             />
           ) : activeTab === 'map' ? (
