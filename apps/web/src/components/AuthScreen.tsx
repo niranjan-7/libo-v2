@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, LogIn, UserPlus, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { BookOpen, LogIn, UserPlus, KeyRound, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react';
 
-export const AuthScreen: React.FC = () => {
+export interface AuthScreenProps {
+  onOpenShowcase?: () => void;
+}
+
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
   const { login, register, acceptInvite, error, clearError } = useAuth();
   const [tab, setTab] = useState<'login' | 'register' | 'invite'>('login');
 
@@ -409,6 +413,20 @@ export const AuthScreen: React.FC = () => {
               {isSubmitting ? 'Verifying Token...' : 'Join Organization'}
             </button>
           </form>
+        )}
+
+        {onOpenShowcase && (
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={onOpenShowcase}
+              className="btn sm"
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              <Sparkles size={14} color="var(--accent)" />
+              Inspect UI Component Showcase
+            </button>
+          </div>
         )}
       </div>
     </div>

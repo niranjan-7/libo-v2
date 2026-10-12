@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
+import { useToast } from './ui/Toast';
 import { OrgRole } from '@library/contracts';
 import {
   BookOpen,
@@ -18,12 +20,61 @@ import {
   Users,
   CheckCircle,
   Database,
-  ArrowRight,
   Clock,
+  Palette,
+  Sparkles,
+  Menu,
+  X,
 } from 'lucide-react';
 import { CreateOrgModal } from './CreateOrgModal';
 import { CreateLibraryModal } from './CreateLibraryModal';
 import { InviteMemberModal } from './InviteMemberModal';
+import { AppearanceDrawer } from './theme/AppearanceDrawer';
+import { ComponentShowcase } from './showcase/ComponentShowcase';
+import { BookCard, BookItem } from './ui/BookCard';
+
+const SAMPLE_OVERVIEW_BOOKS: BookItem[] = [
+  {
+    id: 1,
+    title: 'The Midnight Library',
+    author: 'Matt Haig',
+    year: 2020,
+    tag: 'Fiction',
+    status: 'Available',
+    copies: 4,
+    rating: '4.4',
+  },
+  {
+    id: 2,
+    title: 'The Library Book',
+    author: 'Susan Orlean',
+    year: 2018,
+    tag: 'Nonfiction',
+    status: 'On loan',
+    copies: 2,
+    rating: '4.2',
+  },
+  {
+    id: 3,
+    title: 'The Shadow of the Wind',
+    author: 'Carlos Ruiz Zafón',
+    year: 2005,
+    tag: 'Mystery',
+    status: 'Waitlist',
+    copies: 0,
+    rating: '4.5',
+  },
+  {
+    id: 4,
+    title: 'Project Hail Mary',
+    author: 'Andy Weir',
+    year: 2021,
+    tag: 'Science Fiction',
+    status: 'Available',
+    copies: 3,
+    rating: '4.7',
+  },
+];
 
 export const DashboardShell: React.FC = () => {
   const {
@@ -37,22 +88,17 @@ export const DashboardShell: React.FC = () => {
     logout,
   } = useAuth();
 
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'circulation' | 'map' | 'analytics' | 'settings' | 'members'>('overview');
+  const { theme, toggleDarkMode } = useTheme();
+  const { showToast } = useToast();
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'circulation' | 'map' | 'analytics' | 'settings' | 'members' | 'showcase'>('overview');
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   // Modal visibility states
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
   const [showCreateLibraryModal, setShowCreateLibraryModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
-
-  // Sync dark mode class on body
-  useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark');
-    } else {
-      document.body.classList.remove('dark');
-    }
-  }, [isDarkMode]);
+  const [showAppearanceDrawer, setShowAppearanceDrawer] = useState(false);
 
   const canManageLibraries = currentRole === OrgRole.OWNER || currentRole === OrgRole.ADMIN;
   const canInviteMembers = currentRole === OrgRole.OWNER || currentRole === OrgRole.ADMIN;
@@ -62,89 +108,139 @@ export const DashboardShell: React.FC = () => {
 
   return (
     <div className="app-container">
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setIsMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* 1. SIDEBAR */}
-      <aside className="app-sidebar">
-        <div className="brand">
+      <aside className={`app-sidebar ${isMobileOpen ? 'open' : ''}`}>
+        <div className="brand" style={{ position: 'relative' }}>
           <div className="brand-logo">
             <BookOpen size={20} />
           </div>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <span className="brand-title">Library Platform</span>
             <span className="brand-subtitle">Multi-Tenant v2.0</span>
           </div>
+          {isMobileOpen && (
+            <button
+              onClick={() => setIsMobileOpen(false)}
+              className="icon-btn"
+              style={{ width: '32px', height: '32px' }}
+              aria-label="Close menu"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div className="section-label">Main Navigation</div>
+
           <button
-            onClick={() => setActiveTab('overview')}
-            className={`btn ${activeTab === 'overview' ? 'primary' : ''}`}
-            style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }}
+            onClick={() => { setActiveTab('overview'); setIsMobileOpen(false); }}
+            className={`side-nav-item ${activeTab === 'overview' ? 'active' : ''}`}
           >
-            <Layers size={16} /> Overview
+            <span className="nav-number">01</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Layers size={16} /> Overview
+            </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('catalog')}
-            className={`btn ${activeTab === 'catalog' ? 'primary' : ''}`}
-            style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }}
+            onClick={() => { setActiveTab('catalog'); setIsMobileOpen(false); }}
+            className={`side-nav-item ${activeTab === 'catalog' ? 'active' : ''}`}
           >
-            <BookOpen size={16} /> Catalog & Search
-          </button>
-
-          {canManageLibraries && (
-            <button
-              onClick={() => setActiveTab('circulation')}
-              className={`btn ${activeTab === 'circulation' ? 'primary' : ''}`}
-              style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }}
-            >
-              <Clock size={16} /> Circulation Desk
-            </button>
-          )}
-
-          <button
-            onClick={() => setActiveTab('map')}
-            className={`btn ${activeTab === 'map' ? 'primary' : ''}`}
-            style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }}
-          >
-            <MapPin size={16} /> Floor Map & Zones
+            <span className="nav-number">02</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <BookOpen size={16} /> Catalog & Search
+            </span>
           </button>
 
           {canManageLibraries && (
             <button
-              onClick={() => setActiveTab('analytics')}
-              className={`btn ${activeTab === 'analytics' ? 'primary' : ''}`}
-              style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }}
+              onClick={() => { setActiveTab('circulation'); setIsMobileOpen(false); }}
+              className={`side-nav-item ${activeTab === 'circulation' ? 'active' : ''}`}
             >
-              <BarChart3 size={16} /> Analytics & Reports
+              <span className="nav-number">03</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Clock size={16} /> Circulation Desk
+              </span>
+            </button>
+          )}
+
+          <button
+            onClick={() => { setActiveTab('map'); setIsMobileOpen(false); }}
+            className={`side-nav-item ${activeTab === 'map' ? 'active' : ''}`}
+          >
+            <span className="nav-number">04</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MapPin size={16} /> Floor Map & Zones
+            </span>
+          </button>
+
+          {canManageLibraries && (
+            <button
+              onClick={() => { setActiveTab('analytics'); setIsMobileOpen(false); }}
+              className={`side-nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
+            >
+              <span className="nav-number">05</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BarChart3 size={16} /> Analytics & Reports
+              </span>
             </button>
           )}
 
           {canManageLibraries && (
             <button
-              onClick={() => setActiveTab('members')}
-              className={`btn ${activeTab === 'members' ? 'primary' : ''}`}
-              style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }}
+              onClick={() => { setActiveTab('members'); setIsMobileOpen(false); }}
+              className={`side-nav-item ${activeTab === 'members' ? 'active' : ''}`}
             >
-              <Users size={16} /> Members & Invites
+              <span className="nav-number">06</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={16} /> Members & Invites
+              </span>
             </button>
           )}
 
           {canManageLibraries && (
             <button
-              onClick={() => setActiveTab('settings')}
-              className={`btn ${activeTab === 'settings' ? 'primary' : ''}`}
-              style={{ width: '100%', justifyContent: 'flex-start', border: 'none' }}
+              onClick={() => { setActiveTab('settings'); setIsMobileOpen(false); }}
+              className={`side-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
             >
-              <Settings size={16} /> Branch Settings
+              <span className="nav-number">07</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={16} /> Branch Settings
+              </span>
             </button>
           )}
+
+          <div className="section-label" style={{ marginTop: '10px' }}>Design System</div>
+          <button
+            onClick={() => { setActiveTab('showcase'); setIsMobileOpen(false); }}
+            className={`side-nav-item ${activeTab === 'showcase' ? 'active' : ''}`}
+            style={{
+              background: activeTab === 'showcase' ? 'var(--accent)' : 'color-mix(in srgb, var(--accent-soft) 40%, transparent)',
+              color: activeTab === 'showcase' ? '#fff' : 'var(--accent)',
+              fontWeight: 700,
+            }}
+          >
+            <span className="nav-number" style={{ background: activeTab === 'showcase' ? 'rgba(255,255,255,0.2)' : 'var(--accent-soft)', color: activeTab === 'showcase' ? '#fff' : 'var(--accent)' }}>
+              UI
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={16} /> Component Showcase
+            </span>
+          </button>
         </nav>
 
         {/* Sidebar Footer: Tenant Database Isolation Badge */}
-        <div style={{
-          marginTop: 'auto',
-          paddingTop: '20px',
-        }}>
+        <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
           <div style={{
             background: 'var(--canvas)',
             border: '1px solid var(--border)',
@@ -171,6 +267,15 @@ export const DashboardShell: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Topbar */}
         <header className="app-topbar">
+          <button
+            type="button"
+            className="icon-btn mobile-menu-btn"
+            aria-label="Toggle navigation menu"
+            onClick={() => setIsMobileOpen(!isMobileOpen)}
+          >
+            <Menu size={18} />
+          </button>
+
           {/* Organization Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Building2 size={16} color="var(--muted)" />
@@ -184,15 +289,7 @@ export const DashboardShell: React.FC = () => {
                     selectOrganization(e.target.value);
                   }
                 }}
-                style={{
-                  background: 'var(--canvas)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text)',
-                  padding: '6px 10px',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  fontSize: '12px',
-                }}
+                className="top-select"
               >
                 {organizations.map((org) => (
                   <option key={org.organization.organizationId} value={org.organization.organizationId}>
@@ -214,7 +311,7 @@ export const DashboardShell: React.FC = () => {
 
           {/* Library Branch Selector (max 3) */}
           {currentOrg && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '6px' }}>
               <Library size={16} color="var(--muted)" />
               {currentOrg.libraries.length > 0 ? (
                 <select
@@ -226,15 +323,7 @@ export const DashboardShell: React.FC = () => {
                       selectLibrary(e.target.value);
                     }
                   }}
-                  style={{
-                    background: 'var(--canvas)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text)',
-                    padding: '6px 10px',
-                    borderRadius: '9px',
-                    fontWeight: 700,
-                    fontSize: '12px',
-                  }}
+                  className="top-select"
                 >
                   {currentOrg.libraries.map((lib) => (
                     <option key={lib.libraryId} value={lib.libraryId}>
@@ -275,14 +364,24 @@ export const DashboardShell: React.FC = () => {
             </span>
           )}
 
+          {/* Appearance Settings Trigger */}
+          <button
+            onClick={() => setShowAppearanceDrawer(true)}
+            className="icon-btn"
+            title="Customize theme & appearance"
+            aria-label="Customize theme & appearance"
+          >
+            <Palette size={16} />
+          </button>
+
           {/* Dark Mode Toggle */}
           <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className="btn"
-            style={{ padding: '8px', borderRadius: '50%' }}
-            title="Toggle theme"
+            onClick={toggleDarkMode}
+            className="icon-btn"
+            title="Toggle light/dark theme"
+            aria-label="Toggle light/dark theme"
           >
-            {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+            {theme.darkMode ? <Sun size={15} /> : <Moon size={15} />}
           </button>
 
           {/* User Profile & Logout */}
@@ -307,8 +406,9 @@ export const DashboardShell: React.FC = () => {
 
         {/* Content Area */}
         <main className="app-content">
-          {/* Empty State if No Organizations */}
-          {organizations.length === 0 ? (
+          {activeTab === 'showcase' ? (
+            <ComponentShowcase />
+          ) : organizations.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '600px', margin: '40px auto' }}>
               <div style={{
                 width: '60px',
@@ -346,7 +446,13 @@ export const DashboardShell: React.FC = () => {
                     {currentOrg?.organization.name} &bull; Timezone: {currentLibrary?.timezone || 'Asia/Kolkata'} &bull; Status: Active
                   </p>
                 </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div className="head-actions">
+                  <button
+                    onClick={() => setActiveTab('showcase')}
+                    className="btn"
+                  >
+                    <Sparkles size={15} /> Open Component Showcase
+                  </button>
                   {canInviteMembers && (
                     <button
                       onClick={() => setShowInviteModal(true)}
@@ -508,9 +614,28 @@ export const DashboardShell: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="notice-box">
-                    <strong>Milestone Status:</strong> Vertical Slice Complete. Auth, Organization Onboarding, Dynamic Tenant DB Provisioning, Library Branch Management (with 3-branch limit), and Member Invitations are operational.
+                  <div className="notice-box" style={{ marginTop: '18px' }}>
+                    <strong>Modern Design System:</strong> Reusable React tokens, book cards, pills, dialogs, and customizable appearance drawer are fully active.
                   </div>
+                </div>
+              </div>
+
+              {/* Trending Shelf Preview with Modern Book Cards */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>Featured Books & Cover Art</h3>
+                  <button onClick={() => setActiveTab('showcase')} className="btn sm">
+                    View Component Gallery
+                  </button>
+                </div>
+                <div className="grid-2">
+                  {SAMPLE_OVERVIEW_BOOKS.slice(0, 2).map((book) => (
+                    <BookCard
+                      key={book.id}
+                      book={book}
+                      onExplore={(b) => showToast(`Opening title: ${b.title}`, 'info')}
+                    />
+                  ))}
                 </div>
               </div>
             </>
@@ -518,7 +643,7 @@ export const DashboardShell: React.FC = () => {
         </main>
       </div>
 
-      {/* MODALS */}
+      {/* MODALS & DRAWERS */}
       <CreateOrgModal
         isOpen={showCreateOrgModal}
         onClose={() => setShowCreateOrgModal(false)}
@@ -532,6 +657,11 @@ export const DashboardShell: React.FC = () => {
       <InviteMemberModal
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
+      />
+
+      <AppearanceDrawer
+        isOpen={showAppearanceDrawer}
+        onClose={() => setShowAppearanceDrawer(false)}
       />
     </div>
   );
