@@ -17,6 +17,7 @@ export const InviteMemberModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   if (!isOpen) return null;
 
@@ -48,6 +49,15 @@ export const InviteMemberModal: React.FC<Props> = ({ isOpen, onClose }) => {
       navigator.clipboard.writeText(generatedToken);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (generatedToken) {
+      const inviteUrl = `${window.location.origin}/?invite=${generatedToken}`;
+      navigator.clipboard.writeText(inviteUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
     }
   };
 
@@ -150,43 +160,88 @@ export const InviteMemberModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <div>Invitation successfully generated!</div>
             </div>
 
-            <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 10px' }}>
-              Share this secure invitation token with <strong>{email}</strong>. The recipient can redeem it under "Join via Invite".
+            <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 14px', lineHeight: 1.5 }}>
+              Share this invitation with <strong>{email}</strong>. In production, an automated email is dispatched to their inbox. In local/preview environments, you can copy the direct onboarding link or raw token below:
             </p>
 
-            <div style={{
-              display: 'flex',
-              gap: '8px',
-              alignItems: 'center',
-              background: 'var(--canvas)',
-              border: '1px solid var(--border)',
-              borderRadius: '10px',
-              padding: '8px 12px',
-              marginBottom: '20px',
-            }}>
-              <input
-                type="text"
-                readOnly
-                value={generatedToken}
-                style={{
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text)',
-                  fontSize: '11px',
-                  fontFamily: 'monospace',
-                  outline: 'none',
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="btn"
-                style={{ padding: '6px 10px', fontSize: '11px' }}
-              >
-                {copied ? <Check size={14} color="var(--success-text)" /> : <Copy size={14} />}
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
+            {/* 1. Direct Invite Link */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '5px', color: 'var(--text)' }}>
+                Direct Onboarding Link (Recommended)
+              </label>
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'center',
+                background: 'var(--canvas)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                padding: '8px 12px',
+              }}>
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/?invite=${generatedToken}`}
+                  style={{
+                    flex: 1,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    fontSize: '11px',
+                    fontFamily: 'monospace',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="btn primary"
+                  style={{ padding: '6px 10px', fontSize: '11px', flexShrink: 0 }}
+                >
+                  {copiedLink ? <Check size={14} color="#fff" /> : <Copy size={14} />}
+                  {copiedLink ? 'Link Copied!' : 'Copy Link'}
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Raw Token */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '5px', color: 'var(--text)' }}>
+                Raw 64-Character Token
+              </label>
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'center',
+                background: 'var(--canvas)',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                padding: '8px 12px',
+              }}>
+                <input
+                  type="text"
+                  readOnly
+                  value={generatedToken}
+                  style={{
+                    flex: 1,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    fontSize: '11px',
+                    fontFamily: 'monospace',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="btn"
+                  style={{ padding: '6px 10px', fontSize: '11px', flexShrink: 0 }}
+                >
+                  {copied ? <Check size={14} color="var(--success-text)" /> : <Copy size={14} />}
+                  {copied ? 'Copied!' : 'Copy Token'}
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

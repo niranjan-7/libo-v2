@@ -177,7 +177,7 @@ export const api = {
       return request(`/organizations/${orgId}/invitations`);
     },
     acceptInvite: async (body: AcceptInviteRequest): Promise<{ success: boolean; organizationId: string; role: string }> => {
-      return request('/invitations/accept', {
+      return request('/organizations/invitations/accept', {
         method: 'POST',
         body: JSON.stringify(body),
       });

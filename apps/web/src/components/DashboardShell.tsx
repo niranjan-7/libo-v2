@@ -30,10 +30,12 @@ import {
   ArrowRightLeft,
   Bell,
   FolderHeart,
+  KeyRound,
 } from 'lucide-react';
 import { CreateOrgModal } from './CreateOrgModal';
 import { CreateLibraryModal } from './CreateLibraryModal';
 import { InviteMemberModal } from './InviteMemberModal';
+import { AcceptInviteModal } from './AcceptInviteModal';
 import { AppearanceDrawer } from './theme/AppearanceDrawer';
 import { ComponentShowcase } from './showcase/ComponentShowcase';
 import { BookCard, BookItem } from './ui/BookCard';
@@ -117,6 +119,8 @@ export const DashboardShell: React.FC = () => {
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
   const [showCreateLibraryModal, setShowCreateLibraryModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showAcceptInviteModal, setShowAcceptInviteModal] = useState(false);
+  const [urlInviteToken, setUrlInviteToken] = useState('');
   const [showAppearanceDrawer, setShowAppearanceDrawer] = useState(false);
   const [showNotificationsDrawer, setShowNotificationsDrawer] = useState(false);
 
@@ -124,12 +128,17 @@ export const DashboardShell: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationDto[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
-  // Check URL parameters for shared deep links
+  // Check URL parameters for shared deep links or invite tokens
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sharedCollectionId = params.get('collectionId');
     const sharedBookId = params.get('bookId');
-    if (sharedCollectionId) {
+    const inviteParam = params.get('invite');
+
+    if (inviteParam) {
+      setUrlInviteToken(inviteParam);
+      setShowAcceptInviteModal(true);
+    } else if (sharedCollectionId) {
       setActiveTab('community');
     } else if (sharedBookId) {
       setSelectedBookId(sharedBookId);
@@ -397,6 +406,8 @@ export const DashboardShell: React.FC = () => {
                 onChange={(e) => {
                   if (e.target.value === '__NEW__') {
                     setShowCreateOrgModal(true);
+                  } else if (e.target.value === '__JOIN_INVITE__') {
+                    setShowAcceptInviteModal(true);
                   } else {
                     selectOrganization(e.target.value);
                   }
@@ -409,15 +420,25 @@ export const DashboardShell: React.FC = () => {
                   </option>
                 ))}
                 <option value="__NEW__">+ New Organization...</option>
+                <option value="__JOIN_INVITE__">🔗 Join with Invite Token...</option>
               </select>
             ) : (
-              <button
-                onClick={() => setShowCreateOrgModal(true)}
-                className="btn primary"
-                style={{ padding: '6px 12px', fontSize: '11px' }}
-              >
-                <Plus size={14} /> Create Organization
-              </button>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={() => setShowCreateOrgModal(true)}
+                  className="btn primary"
+                  style={{ padding: '6px 12px', fontSize: '11px' }}
+                >
+                  <Plus size={14} /> Create Organization
+                </button>
+                <button
+                  onClick={() => setShowAcceptInviteModal(true)}
+                  className="btn secondary"
+                  style={{ padding: '6px 12px', fontSize: '11px' }}
+                >
+                  <KeyRound size={14} /> Join via Invite
+                </button>
+              </div>
             )}
           </div>
 
@@ -553,32 +574,91 @@ export const DashboardShell: React.FC = () => {
           {activeTab === 'showcase' ? (
             <ComponentShowcase />
           ) : organizations.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '600px', margin: '40px auto' }}>
-              <div style={{
-                width: '60px',
-                height: '60px',
-                borderRadius: '18px',
-                background: 'var(--accent-soft)',
-                color: 'var(--accent)',
-                display: 'inline-grid',
-                placeItems: 'center',
-                marginBottom: '20px',
-              }}>
-                <Building2 size={32} />
+            <div style={{ maxWidth: '800px', margin: '40px auto', padding: '0 20px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                <div style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '18px',
+                  background: 'var(--accent-soft)',
+                  color: 'var(--accent)',
+                  display: 'inline-grid',
+                  placeItems: 'center',
+                  marginBottom: '16px',
+                }}>
+                  <BookOpen size={30} />
+                </div>
+                <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 8px' }}>
+                  Welcome to Library Platform
+                </h2>
+                <p style={{ color: 'var(--muted)', fontSize: '14px', maxWidth: '520px', margin: '0 auto', lineHeight: 1.6 }}>
+                  Your account is registered. You can set up a new institution with an auto-provisioned PostgreSQL database, or join an existing organization using an invitation token.
+                </p>
               </div>
-              <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 8px' }}>
-                Welcome to Library Platform
-              </h2>
-              <p style={{ color: 'var(--muted)', fontSize: '13px', lineHeight: 1.6, maxWidth: '440px', margin: '0 auto 24px' }}>
-                Your account is ready. Create your organization to auto-provision an isolated PostgreSQL tenant database and your first independent library branch.
-              </p>
-              <button
-                onClick={() => setShowCreateOrgModal(true)}
-                className="btn primary"
-                style={{ padding: '12px 24px', fontSize: '13px' }}
-              >
-                <Plus size={16} /> Create Organization Now
-              </button>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                {/* Option 1: Create Organization */}
+                <div className="card" style={{ padding: '28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      background: 'var(--accent-soft)',
+                      color: 'var(--accent)',
+                      display: 'grid',
+                      placeItems: 'center',
+                      marginBottom: '16px',
+                    }}>
+                      <Building2 size={24} />
+                    </div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 8px' }}>
+                      Create New Organization
+                    </h3>
+                    <p style={{ color: 'var(--muted)', fontSize: '13px', lineHeight: 1.5, margin: '0 0 20px' }}>
+                      Setting up a new institution? Provision a dedicated, isolated PostgreSQL tenant database and initialize your primary library branch as Owner.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateOrgModal(true)}
+                    className="btn primary"
+                    style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+                  >
+                    <Plus size={16} /> Create Organization Now
+                  </button>
+                </div>
+
+                {/* Option 2: Join Existing Organization */}
+                <div className="card" style={{ padding: '28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      background: 'var(--surface-hover)',
+                      color: 'var(--text)',
+                      display: 'grid',
+                      placeItems: 'center',
+                      marginBottom: '16px',
+                    }}>
+                      <KeyRound size={24} />
+                    </div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 8px' }}>
+                      Join Existing Organization
+                    </h3>
+                    <p style={{ color: 'var(--muted)', fontSize: '13px', lineHeight: 1.5, margin: '0 0 20px' }}>
+                      Received an invitation token or email link from your library administrator? Enter your token to join their workspace as a reader or staff member.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowAcceptInviteModal(true)}
+                    className="btn secondary"
+                    style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+                  >
+                    <KeyRound size={16} /> Enter Invitation Token
+                  </button>
+                </div>
+              </div>
             </div>
           ) : activeTab === 'catalog' ? (
             selectedBookId ? (
@@ -861,6 +941,15 @@ export const DashboardShell: React.FC = () => {
       <InviteMemberModal
         isOpen={showInviteModal}
         onClose={() => setShowInviteModal(false)}
+      />
+
+      <AcceptInviteModal
+        isOpen={showAcceptInviteModal}
+        onClose={() => {
+          setShowAcceptInviteModal(false);
+          setUrlInviteToken('');
+        }}
+        initialToken={urlInviteToken}
       />
 
       <AppearanceDrawer

@@ -9,6 +9,7 @@ export interface AuthScreenProps {
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
   const { login, register, acceptInvite, error, clearError } = useAuth();
   const [tab, setTab] = useState<'login' | 'register' | 'invite'>('login');
+  const [inviteAuthMode, setInviteAuthMode] = useState<'register' | 'login'>('register');
 
   // Form states
   const [email, setEmail] = useState('');
@@ -19,6 +20,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Check URL query parameters for invite tokens on mount
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get('invite');
+    if (tokenFromUrl) {
+      setInviteToken(tokenFromUrl);
+      setTab('invite');
+    }
+  }, []);
 
   const handleTabChange = (newTab: 'login' | 'register' | 'invite') => {
     setTab(newTab);
@@ -38,6 +49,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
     setIsSubmitting(true);
     try {
       await login(email, password);
+      if (inviteToken.trim()) {
+        try {
+          await acceptInvite(inviteToken.trim());
+        } catch (inviteErr: any) {
+          console.warn('Auto-accept invite error:', inviteErr);
+        }
+      }
     } catch (err: any) {
       setFormError(err.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -60,6 +78,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
     setIsSubmitting(true);
     try {
       await register(email, password, displayName);
+      if (inviteToken.trim()) {
+        try {
+          await acceptInvite(inviteToken.trim());
+        } catch (inviteErr: any) {
+          console.warn('Auto-accept invite error:', inviteErr);
+        }
+      }
       setSuccessMessage('Account created successfully! You are now logged in.');
     } catch (err: any) {
       setFormError(err.message || 'Registration failed.');
@@ -71,14 +96,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
   const handleAcceptInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    if (!inviteToken) {
+    const trimmedToken = inviteToken.trim();
+    if (!trimmedToken) {
       setFormError('Please enter an invitation token.');
+      return;
+    }
+    if (!email || !password) {
+      setFormError('Please enter your email and password.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await acceptInvite(inviteToken.trim());
+      if (inviteAuthMode === 'register') {
+        if (!displayName) {
+          setFormError('Full name is required to create your account.');
+          setIsSubmitting(false);
+          return;
+        }
+        if (password.length < 8) {
+          setFormError('Password must be at least 8 characters long.');
+          setIsSubmitting(false);
+          return;
+        }
+        await register(email, password, displayName);
+      } else {
+        await login(email, password);
+      }
+
+      await acceptInvite(trimmedToken);
       setSuccessMessage('Invitation accepted successfully! Joining organization...');
     } catch (err: any) {
       setFormError(err.message || 'Failed to accept invitation. Token may be invalid or expired.');
@@ -342,7 +388,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
                 }}
               />
             </div>
-            <div style={{ marginBottom: '22px' }}>
+            <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: 'var(--text)' }}>
                 Password (min. 8 characters)
               </label>
@@ -363,6 +409,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
                 }}
               />
             </div>
+            <div style={{ marginBottom: '22px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: 'var(--text)' }}>
+                Invitation Token (Optional)
+              </label>
+              <input
+                type="text"
+                value={inviteToken}
+                onChange={(e) => setInviteToken(e.target.value)}
+                placeholder="64-character invite token (if invited by an institution)"
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  fontFamily: 'monospace',
+                  fontSize: '11px',
+                }}
+              />
+              <small style={{ color: 'var(--muted)', fontSize: '11px', display: 'block', marginTop: '4px' }}>
+                If you were invited to an existing library, paste your token here to join automatically.
+              </small>
+            </div>
             <button
               type="submit"
               disabled={isSubmitting}
@@ -378,7 +448,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
         {/* Form: Invite */}
         {tab === 'invite' && (
           <form onSubmit={handleAcceptInvite}>
-            <div style={{ marginBottom: '22px' }}>
+            <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: 'var(--text)' }}>
                 Invitation Token
               </label>
@@ -396,13 +466,122 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
                   background: 'var(--surface)',
                   color: 'var(--text)',
                   fontFamily: 'monospace',
-                  fontSize: '12px',
+                  fontSize: '11px',
                 }}
               />
-              <small style={{ color: 'var(--muted)', fontSize: '11px', display: 'block', marginTop: '6px' }}>
-                Note: You must be signed in to join an organization using an invitation token.
-              </small>
             </div>
+
+            {/* Mode Toggle */}
+            <div style={{
+              display: 'flex',
+              background: 'var(--canvas)',
+              padding: '3px',
+              borderRadius: '9px',
+              marginBottom: '16px',
+              border: '1px solid var(--border)',
+            }}>
+              <button
+                type="button"
+                onClick={() => setInviteAuthMode('register')}
+                className="btn"
+                style={{
+                  flex: 1,
+                  justifyContent: 'center',
+                  fontSize: '11px',
+                  padding: '6px',
+                  background: inviteAuthMode === 'register' ? 'var(--surface)' : 'transparent',
+                  border: 'none',
+                  fontWeight: inviteAuthMode === 'register' ? 700 : 500,
+                  boxShadow: inviteAuthMode === 'register' ? 'var(--shadow-sm)' : 'none',
+                }}
+              >
+                I am new here
+              </button>
+              <button
+                type="button"
+                onClick={() => setInviteAuthMode('login')}
+                className="btn"
+                style={{
+                  flex: 1,
+                  justifyContent: 'center',
+                  fontSize: '11px',
+                  padding: '6px',
+                  background: inviteAuthMode === 'login' ? 'var(--surface)' : 'transparent',
+                  border: 'none',
+                  fontWeight: inviteAuthMode === 'login' ? 700 : 500,
+                  boxShadow: inviteAuthMode === 'login' ? 'var(--shadow-sm)' : 'none',
+                }}
+              >
+                I have an account
+              </button>
+            </div>
+
+            {inviteAuthMode === 'register' && (
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: 'var(--text)' }}>
+                  Full Name / Display Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Eleanor Vance"
+                  style={{
+                    width: '100%',
+                    padding: '11px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    color: 'var(--text)',
+                  }}
+                />
+              </div>
+            )}
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: 'var(--text)' }}>
+                Email Address
+              </label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="colleague@university.edu"
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '22px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: 'var(--text)' }}>
+                Password {inviteAuthMode === 'register' ? '(min. 8 characters)' : ''}
+              </label>
+              <input
+                type="password"
+                required
+                minLength={inviteAuthMode === 'register' ? 8 : 1}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                }}
+              />
+            </div>
+
             <button
               type="submit"
               disabled={isSubmitting}
@@ -410,7 +589,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onOpenShowcase }) => {
               style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
             >
               <KeyRound size={16} />
-              {isSubmitting ? 'Verifying Token...' : 'Join Organization'}
+              {isSubmitting
+                ? 'Processing...'
+                : inviteAuthMode === 'register'
+                ? 'Create Account & Join'
+                : 'Sign In & Join'}
             </button>
           </form>
         )}
