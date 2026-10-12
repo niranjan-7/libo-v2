@@ -7,7 +7,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import * as crypto from 'crypto';
 import {
   OrgRole,
@@ -391,6 +391,53 @@ export class OrganizationsService {
       organizationId: invite.organization_id,
       role: membership.role,
     };
+  }
+
+  /**
+   * Retrieves all members of an organization with user details.
+   */
+  async getMembers(orgId: string) {
+    const members = await this.membershipRepo.find({
+      where: { organization_id: orgId },
+      order: { joined_at: 'ASC' },
+    });
+    if (members.length === 0) return [];
+
+    const userIds = members.map((m) => m.user_id);
+    const users = await this.userRepo.find({ where: { user_id: In(userIds) } });
+    const userMap = new Map(users.map((u) => [u.user_id, u]));
+
+    return members.map((m) => {
+      const u = userMap.get(m.user_id);
+      return {
+        userId: m.user_id,
+        email: u?.email || '',
+        displayName: u?.display_name || u?.email || 'User',
+        role: m.role,
+        status: m.status,
+        joinedAt: m.joined_at.toISOString(),
+      };
+    });
+  }
+
+  /**
+   * Retrieves all invitations for an organization.
+   */
+  async getInvitations(orgId: string) {
+    const invites = await this.inviteRepo.find({
+      where: { organization_id: orgId },
+      order: { created_at: 'DESC' },
+    });
+
+    return invites.map((i) => ({
+      invitationId: i.invitation_id,
+      email: i.email,
+      proposedRole: i.proposed_role,
+      targetLibraryId: i.target_library_id,
+      expiresAt: i.expires_at.toISOString(),
+      acceptedAt: i.accepted_at ? i.accepted_at.toISOString() : null,
+      createdAt: i.created_at.toISOString(),
+    }));
   }
 
   private async getLibrariesForOrg(organizationId: string): Promise<LibraryDto[]> {

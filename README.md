@@ -33,7 +33,12 @@ library-platform/
 │   ├── api-contract.md           # REST endpoint contracts
 │   ├── implementation-plan.md    # Milestone roadmap & status log
 │   ├── product-requirements.md   # PRD & circulation business rules
-│   └── design-audit.md           # Tokens, theme presets, and 30-screen inventory
+│   ├── design-audit.md           # Tokens, theme presets, and 30-screen inventory
+│   ├── deployment.md             # Production deployment guide & reverse proxy setup
+│   ├── runbook.md                # Operations, backups, disaster recovery & migrations
+│   ├── environment-variables.md  # Comprehensive environment variable reference
+│   ├── known-limitations.md      # Documented constraints & architectural trade-offs
+│   └── feature-coverage.md       # Final feature matrix & verification log
 ├── design-reference/
 │   └── library_platform_interactive_prototype_v2.html # Standalone visual standard
 ├── README.md                     # Root project documentation
@@ -89,7 +94,13 @@ library-platform/
   ```bash
   npm run migration:run --workspace=@library/api
   ```
-  Applies the initial control plane schema: `users`, `organizations`, `org_memberships`, `org_invitations`, `tenant_database_registry`, and `control_plane_audit_logs`.
+  Applies the central control plane schema: `users`, `organizations`, `org_memberships`, `org_invitations`, `tenant_database_registry`, and `control_plane_audit_logs`.
+
+- **Run Fleet-Wide Tenant Migrations:**
+  ```bash
+  npm run migration:tenant:run --workspace=@library/api
+  ```
+  Applies tenant schema migrations across all registered healthy tenant databases.
 
 ### 4.3 Running Applications
 - **Start NestJS API (Development mode with hot reload):**
@@ -109,9 +120,13 @@ library-platform/
   ```bash
   npm run typecheck
   ```
-- **Run Unit & Service Tests:**
+- **Run Unit Tests:**
   ```bash
   npm run test
+  ```
+- **Run PostgreSQL Integration Test Suite (93 tests across 8 suites):**
+  ```bash
+  npm run test:integration --workspace=@library/api
   ```
 - **Run Linters:**
   ```bash

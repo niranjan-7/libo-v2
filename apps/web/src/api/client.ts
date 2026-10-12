@@ -151,6 +151,31 @@ export const api = {
         body: JSON.stringify(body),
       });
     },
+    getMembers: async (
+      orgId: string,
+    ): Promise<Array<{
+      userId: string;
+      email: string;
+      displayName: string;
+      role: string;
+      status: string;
+      joinedAt: string;
+    }>> => {
+      return request(`/organizations/${orgId}/members`);
+    },
+    getInvitations: async (
+      orgId: string,
+    ): Promise<Array<{
+      invitationId: string;
+      email: string;
+      proposedRole: string;
+      targetLibraryId?: string | null;
+      expiresAt: string;
+      acceptedAt?: string | null;
+      createdAt: string;
+    }>> => {
+      return request(`/organizations/${orgId}/invitations`);
+    },
     acceptInvite: async (body: AcceptInviteRequest): Promise<{ success: boolean; organizationId: string; role: string }> => {
       return request('/invitations/accept', {
         method: 'POST',

@@ -44,6 +44,9 @@ import { InventoryScreen } from './inventory/InventoryScreen';
 import { CirculationDeskScreen } from './circulation/CirculationDeskScreen';
 import { ReaderCirculationScreen } from './circulation/ReaderCirculationScreen';
 import { CommunityScreen } from './community/CommunityScreen';
+import { MembersScreen } from './admin/MembersScreen';
+import { BranchSettingsScreen } from './admin/BranchSettingsScreen';
+import { AnalyticsScreen } from './admin/AnalyticsScreen';
 
 const SAMPLE_OVERVIEW_BOOKS: BookItem[] = [
   {
@@ -631,6 +634,12 @@ export const DashboardShell: React.FC = () => {
                 setActiveTab('catalog');
               }}
             />
+          ) : activeTab === 'analytics' ? (
+            <AnalyticsScreen />
+          ) : activeTab === 'settings' ? (
+            <BranchSettingsScreen />
+          ) : activeTab === 'members' ? (
+            <MembersScreen onOpenInviteModal={() => setShowInviteModal(true)} />
           ) : (
             <>
               {/* Page Header */}

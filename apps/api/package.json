@@ -13,7 +13,8 @@
     "test:integration": "jest --config ./test/jest-integration.json --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "migration:run": "ts-node -r tsconfig-paths/register ./src/database/cli/run-control-plane-migrations.ts"
+    "migration:run": "ts-node -r tsconfig-paths/register ./src/database/cli/run-control-plane-migrations.ts",
+    "migration:tenant:run": "ts-node -r tsconfig-paths/register ./src/database/cli/run-tenant-migrations.ts"
   },
   "dependencies": {
     "@library/contracts": "*",

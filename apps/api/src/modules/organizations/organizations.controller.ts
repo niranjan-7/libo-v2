@@ -76,6 +76,19 @@ export class OrganizationsController {
     return this.orgService.inviteMember(orgId, user.userId, dto);
   }
 
+  @Get(':orgId/members')
+  @UseGuards(OrgRoleGuard)
+  async getMembers(@Param('orgId') orgId: string) {
+    return this.orgService.getMembers(orgId);
+  }
+
+  @Get(':orgId/invitations')
+  @UseGuards(OrgRoleGuard)
+  @RequireOrgRole(OrgRole.OWNER, OrgRole.ADMIN)
+  async getInvitations(@Param('orgId') orgId: string) {
+    return this.orgService.getInvitations(orgId);
+  }
+
   @Post('invitations/accept')
   @HttpCode(HttpStatus.OK)
   async acceptInvitation(
