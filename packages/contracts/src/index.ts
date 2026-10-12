@@ -103,6 +103,7 @@ export enum LedgerDirection {
 export interface UserDto {
   userId: string;
   email: string;
+  displayName: string;
   status: string;
   createdAt: string;
 }
@@ -124,10 +125,51 @@ export interface LibraryDto {
   createdAt: string;
 }
 
-export interface AuthSessionResponse {
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  displayName: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
   user: UserDto;
+  token: string;
   organizations: Array<{
     organization: OrganizationDto;
     role: OrgRole;
   }>;
+}
+
+export interface CreateOrganizationRequest {
+  name: string;
+  slug: string;
+  initialLibraryName?: string;
+  timezone?: string;
+}
+
+export interface CreateLibraryRequest {
+  name: string;
+  slug: string;
+  timezone?: string;
+}
+
+export interface InviteMemberRequest {
+  email: string;
+  proposedRole: OrgRole;
+  targetLibraryId?: string;
+}
+
+export interface AcceptInviteRequest {
+  token: string;
+}
+
+export interface OrganizationDetailsResponse {
+  organization: OrganizationDto;
+  role: OrgRole;
+  libraries: LibraryDto[];
 }

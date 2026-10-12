@@ -6,6 +6,8 @@ import { getControlPlaneTypeOrmConfig } from './config/database.config';
 import { HealthModule } from './modules/health/health.module';
 import { ControlPlaneModule } from './modules/control-plane/control-plane.module';
 import { TenantConnectionModule } from './modules/tenant-connection/tenant-connection.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { OrganizationsModule } from './modules/organizations/organizations.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { TenantConnectionModule } from './modules/tenant-connection/tenant-conne
     }),
     ControlPlaneModule,
     TenantConnectionModule,
+    AuthModule,
+    OrganizationsModule,
     HealthModule,
   ],
 })

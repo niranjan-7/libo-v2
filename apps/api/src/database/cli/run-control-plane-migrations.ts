@@ -8,6 +8,7 @@ import { OrgInvitationEntity } from '../control-plane/entities/org-invitation.en
 import { TenantDatabaseRegistryEntity } from '../control-plane/entities/tenant-registry.entity';
 import { ControlPlaneAuditLogEntity } from '../control-plane/entities/control-plane-audit.entity';
 import { InitialControlPlane1700000000000 } from '../control-plane/migrations/1700000000000-InitialControlPlane';
+import { AddUserDisplayName1700000000002 } from '../control-plane/migrations/1700000000002-AddUserDisplayName';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../../../.env') });
 
@@ -28,7 +29,7 @@ async function run() {
       TenantDatabaseRegistryEntity,
       ControlPlaneAuditLogEntity,
     ],
-    migrations: [InitialControlPlane1700000000000],
+    migrations: [InitialControlPlane1700000000000, AddUserDisplayName1700000000002],
     synchronize: false,
     logging: true,
   });

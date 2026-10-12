@@ -7,6 +7,7 @@ import { OrgInvitationEntity } from '../database/control-plane/entities/org-invi
 import { TenantDatabaseRegistryEntity } from '../database/control-plane/entities/tenant-registry.entity';
 import { ControlPlaneAuditLogEntity } from '../database/control-plane/entities/control-plane-audit.entity';
 import { InitialControlPlane1700000000000 } from '../database/control-plane/migrations/1700000000000-InitialControlPlane';
+import { AddUserDisplayName1700000000002 } from '../database/control-plane/migrations/1700000000002-AddUserDisplayName';
 
 export function getControlPlaneTypeOrmConfig(configService: ConfigService): TypeOrmModuleOptions {
   return {
@@ -24,7 +25,7 @@ export function getControlPlaneTypeOrmConfig(configService: ConfigService): Type
       TenantDatabaseRegistryEntity,
       ControlPlaneAuditLogEntity,
     ],
-    migrations: [InitialControlPlane1700000000000],
+    migrations: [InitialControlPlane1700000000000, AddUserDisplayName1700000000002],
     migrationsRun: false,
     synchronize: false, // Strict requirement: do not use synchronize in production
     logging: configService.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : false,
