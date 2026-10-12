@@ -14,6 +14,14 @@ import {
   InventoryStatsResponse,
   FloorPlanResponse,
   RackDetailResponse,
+  LibraryFloorDto,
+  CreateFloorRequest,
+  UpdateFloorRequest,
+  FloorPlanVersionDto,
+  SaveFloorPlanDraftRequest,
+  ValidateFloorPlanResponse,
+  PublishFloorPlanResponse,
+  LogicalRackDto,
   CirculationPolicyDto,
   LoanDto,
   ReservationDto,
@@ -209,12 +217,125 @@ export const api = {
     },
   },
   floorPlan: {
+    getFloors: async (orgId: string, libraryId: string): Promise<LibraryFloorDto[]> => {
+      return request<LibraryFloorDto[]>(`/organizations/${orgId}/libraries/${libraryId}/floors`);
+    },
+    createFloor: async (
+      orgId: string,
+      libraryId: string,
+      body: CreateFloorRequest,
+    ): Promise<LibraryFloorDto> => {
+      return request<LibraryFloorDto>(`/organizations/${orgId}/libraries/${libraryId}/floors`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    getFloor: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+    ): Promise<LibraryFloorDto> => {
+      return request<LibraryFloorDto>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}`);
+    },
+    updateFloor: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+      body: UpdateFloorRequest,
+    ): Promise<LibraryFloorDto> => {
+      return request<LibraryFloorDto>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+    },
+    deleteFloor: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+    ): Promise<void> => {
+      return request<void>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}`, {
+        method: 'DELETE',
+      });
+    },
+    getLogicalRacks: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+    ): Promise<LogicalRackDto[]> => {
+      return request<LogicalRackDto[]>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}/racks`);
+    },
+    getVersions: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+    ): Promise<FloorPlanVersionDto[]> => {
+      return request<FloorPlanVersionDto[]>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}/versions`);
+    },
+    getPublishedFloorPlan: async (
+      orgId: string,
+      libraryId: string,
+      floorIdOrNumber: string | number,
+    ): Promise<FloorPlanResponse> => {
+      if (typeof floorIdOrNumber === 'number') {
+        return request<FloorPlanResponse>(`/organizations/${orgId}/libraries/${libraryId}/floors/published-level/${floorIdOrNumber}`);
+      }
+      return request<FloorPlanResponse>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorIdOrNumber}/published`);
+    },
     getFloorPlan: async (
       orgId: string,
       libraryId: string,
       floorNumber: number = 1,
     ): Promise<FloorPlanResponse> => {
       return request<FloorPlanResponse>(`/organizations/${orgId}/libraries/${libraryId}/floor-plan?floor=${floorNumber}`);
+    },
+    getDraft: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+    ): Promise<FloorPlanVersionDto> => {
+      return request<FloorPlanVersionDto>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}/draft`);
+    },
+    saveDraft: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+      versionId: string,
+      body: SaveFloorPlanDraftRequest,
+    ): Promise<FloorPlanVersionDto> => {
+      return request<FloorPlanVersionDto>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}/draft/${versionId}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+    },
+    validateDraft: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+      versionId: string,
+    ): Promise<ValidateFloorPlanResponse> => {
+      return request<ValidateFloorPlanResponse>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}/draft/${versionId}/validate`, {
+        method: 'POST',
+      });
+    },
+    publishDraft: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+      versionId: string,
+    ): Promise<PublishFloorPlanResponse> => {
+      return request<PublishFloorPlanResponse>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}/draft/${versionId}/publish`, {
+        method: 'POST',
+      });
+    },
+    restoreVersion: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+      versionId: string,
+    ): Promise<FloorPlanVersionDto> => {
+      return request<FloorPlanVersionDto>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}/versions/${versionId}/restore`, {
+        method: 'POST',
+      });
     },
     getRackShelves: async (
       orgId: string,

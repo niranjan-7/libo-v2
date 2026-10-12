@@ -267,14 +267,114 @@ export interface CatalogSearchResponse {
   offset: number;
 }
 
-export interface FloorPlanFixtureDto {
+export type FloorPlanVersionStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type SpatialElementType = 'RACK' | 'WALL' | 'DOOR' | 'DESK';
+
+export interface LibraryFloorDto {
+  floorId: string;
+  libraryId: string;
+  name: string;
+  floorNumber: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  coordinateUnit: string;
+}
+
+export interface CreateFloorRequest {
+  name: string;
+  floorNumber: number;
+  canvasWidth?: number;
+  canvasHeight?: number;
+}
+
+export interface UpdateFloorRequest {
+  name?: string;
+  canvasWidth?: number;
+  canvasHeight?: number;
+}
+
+export interface SpatialLayoutElementDto {
   elementId: string;
-  elementType: string;
+  versionId: string;
+  elementType: SpatialElementType | string;
+  label?: string;
   x: number;
   y: number;
   width: number;
   height: number;
   rotation: number;
+  zIndex: number;
+  linkedLocationId?: string | null;
+  linkedRackCode?: string | null;
+  properties?: Record<string, any>;
+  hasBooks?: boolean;
+  availableCopiesCount?: number;
+}
+
+export interface FloorPlanVersionDto {
+  versionId: string;
+  floorId: string;
+  versionNumber: number;
+  status: FloorPlanVersionStatus;
+  createdByUserId: string;
+  publishedAt?: string | null;
+  createdAt: string;
+  elementCount: number;
+  elements?: SpatialLayoutElementDto[];
+}
+
+export interface SaveSpatialElementRequest {
+  elementId?: string;
+  elementType: SpatialElementType | string;
+  label?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  zIndex?: number;
+  linkedLocationId?: string | null;
+  properties?: Record<string, any>;
+}
+
+export interface SaveFloorPlanDraftRequest {
+  elements: SaveSpatialElementRequest[];
+}
+
+export interface ValidateFloorPlanResponse {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface PublishFloorPlanResponse {
+  versionId: string;
+  versionNumber: number;
+  status: 'PUBLISHED';
+  publishedAt: string;
+}
+
+export interface LogicalRackDto {
+  locationId: string;
+  libraryId: string;
+  floorId: string;
+  code: string;
+  name: string;
+  shelfCount: number;
+  totalCopiesCount: number;
+}
+
+export interface FloorPlanFixtureDto {
+  elementId: string;
+  elementType: string;
+  label?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  zIndex?: number;
+  properties?: Record<string, any>;
   linkedLocationId?: string | null;
   linkedRackCode?: string | null;
   hasBooks?: boolean;
@@ -288,6 +388,8 @@ export interface FloorPlanResponse {
   canvasWidth: number;
   canvasHeight: number;
   versionNumber: number;
+  versionId?: string;
+  status?: FloorPlanVersionStatus;
   fixtures: FloorPlanFixtureDto[];
 }
 

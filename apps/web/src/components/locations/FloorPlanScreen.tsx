@@ -1,20 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
 import {
   FloorPlanResponse,
   RackDetailResponse,
+  LibraryFloorDto,
+  CreateFloorRequest,
 } from '@library/contracts';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Chip, StatusBadge } from '../ui/Pill';
+import { Dialog } from '../ui/Dialog';
+import { FormField, TextInput } from '../ui/Input';
 import { LoadingState, EmptyState } from '../ui/StateIndicators';
 import { useToast } from '../ui/Toast';
+import { FloorPlanEditor } from './FloorPlanEditor';
 import {
   MapPin,
   CheckCircle2,
   RefreshCw,
   BookOpen,
+  Edit3,
+  Plus,
+  Layers,
+  Eye,
 } from 'lucide-react';
 
 interface FloorPlanScreenProps {
@@ -26,38 +35,92 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
   initialRackCode,
   onSelectBook,
 }) => {
-  const { currentOrg, currentLibrary } = useAuth();
+  const { currentOrg, currentLibrary, currentRole } = useAuth();
   const { showToast } = useToast();
+  const isStaff = currentRole && ['OWNER', 'ADMIN'].includes(currentRole);
 
+  // Floor Selection
+  const [floors, setFloors] = useState<LibraryFloorDto[]>([]);
+  const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
+  const [loadingFloors, setLoadingFloors] = useState<boolean>(true);
+
+  // Editor vs Viewer Mode
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+
+  // Add Floor Modal
+  const [showAddFloorDialog, setShowAddFloorDialog] = useState<boolean>(false);
+  const [newFloorNumber, setNewFloorNumber] = useState<number>(1);
+  const [newFloorName, setNewFloorName] = useState<string>('Level 1 - Main Stacks');
+  const [newCanvasWidth, setNewCanvasWidth] = useState<number>(1000);
+  const [newCanvasHeight, setNewCanvasHeight] = useState<number>(700);
+  const [isCreatingFloor, setIsCreatingFloor] = useState<boolean>(false);
+
+  // Viewer Mode Data
   const [floorPlan, setFloorPlan] = useState<FloorPlanResponse | null>(null);
   const [selectedRackCode, setSelectedRackCode] = useState<string>(initialRackCode || 'A');
   const [rackDetails, setRackDetails] = useState<RackDetailResponse | null>(null);
-
   const [selectedShelfNumber, setSelectedShelfNumber] = useState<number | null>(null);
-  const [loadingMap, setLoadingMap] = useState(true);
-  const [loadingRack, setLoadingRack] = useState(false);
+  const [loadingMap, setLoadingMap] = useState<boolean>(false);
+  const [loadingRack, setLoadingRack] = useState<boolean>(false);
+  const [zoomLevel, setZoomLevel] = useState<number>(0.85);
 
-  // 1. Fetch Published Floor Plan
-  const fetchFloorPlan = async () => {
+  // 1. Fetch Floors List
+  const fetchFloors = useCallback(async () => {
     if (!currentOrg || !currentLibrary) return;
-    setLoadingMap(true);
+    setLoadingFloors(true);
     try {
-      const data = await api.floorPlan.getFloorPlan(
+      const data = await api.floorPlan.getFloors(
         currentOrg.organization.organizationId,
         currentLibrary.libraryId,
-        1,
+      );
+      setFloors(data);
+      if (data.length > 0 && !selectedFloorId) {
+        setSelectedFloorId(data[0].floorId);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load floors', 'error');
+    } finally {
+      setLoadingFloors(false);
+    }
+  }, [currentOrg, currentLibrary, selectedFloorId, showToast]);
+
+  useEffect(() => {
+    fetchFloors();
+  }, [fetchFloors]);
+
+  const selectedFloor = floors.find((f) => f.floorId === selectedFloorId) || floors[0] || null;
+
+  // 2. Fetch Published Floor Plan for Selected Floor
+  const fetchPublishedFloorPlan = useCallback(async () => {
+    if (!currentOrg || !currentLibrary || !selectedFloor) return;
+    setLoadingMap(true);
+    try {
+      const data = await api.floorPlan.getPublishedFloorPlan(
+        currentOrg.organization.organizationId,
+        currentLibrary.libraryId,
+        selectedFloor.floorId,
       );
       setFloorPlan(data);
+      // If no rack selected or previously selected rack not in this floor, pick first available fixture
+      if (data.fixtures && data.fixtures.length > 0) {
+        const firstRack = data.fixtures.find((f) => f.linkedRackCode);
+        if (firstRack && firstRack.linkedRackCode) {
+          setSelectedRackCode((prev) => prev || firstRack.linkedRackCode!);
+        }
+      }
     } catch (err: any) {
-      showToast(err.message || 'Failed to load floor plan', 'error');
+      // 404 means unpublished draft only or no version yet
+      setFloorPlan(null);
     } finally {
       setLoadingMap(false);
     }
-  };
+  }, [currentOrg, currentLibrary, selectedFloor]);
 
   useEffect(() => {
-    fetchFloorPlan();
-  }, [currentOrg, currentLibrary]);
+    if (!isEditMode && selectedFloor) {
+      fetchPublishedFloorPlan();
+    }
+  }, [isEditMode, selectedFloor, fetchPublishedFloorPlan]);
 
   // If initialRackCode changes externally, select it
   useEffect(() => {
@@ -66,9 +129,9 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
     }
   }, [initialRackCode]);
 
-  // 2. Fetch Selected Rack Shelves
+  // 3. Fetch Selected Rack Shelves
   useEffect(() => {
-    if (!currentOrg || !currentLibrary || !selectedRackCode) return;
+    if (!currentOrg || !currentLibrary || !selectedRackCode || isEditMode) return;
 
     setLoadingRack(true);
     api.floorPlan
@@ -79,7 +142,6 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
       )
       .then((data) => {
         setRackDetails(data);
-        // By default select the first shelf that has copies, or shelf 1
         const shelfWithBooks = data.shelves.find((s) => s.totalCopies > 0);
         setSelectedShelfNumber(shelfWithBooks ? shelfWithBooks.shelfNumber : 1);
       })
@@ -89,14 +151,50 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
       .finally(() => {
         setLoadingRack(false);
       });
-  }, [currentOrg, currentLibrary, selectedRackCode, showToast]);
+  }, [currentOrg, currentLibrary, selectedRackCode, isEditMode, showToast]);
+
+  // 4. Create New Floor
+  const handleCreateFloor = async () => {
+    if (!currentOrg || !currentLibrary) return;
+    setIsCreatingFloor(true);
+    try {
+      const payload: CreateFloorRequest = {
+        floorNumber: newFloorNumber,
+        name: newFloorName,
+        canvasWidth: newCanvasWidth,
+        canvasHeight: newCanvasHeight,
+      };
+      const created = await api.floorPlan.createFloor(
+        currentOrg.organization.organizationId,
+        currentLibrary.libraryId,
+        payload,
+      );
+      showToast(`Floor ${created.floorNumber} created successfully`, 'success');
+      setShowAddFloorDialog(false);
+      setFloors((prev) => [...prev, created]);
+      setSelectedFloorId(created.floorId);
+      setIsEditMode(true); // Open studio directly for the new floor
+    } catch (err: any) {
+      showToast(err.message || 'Failed to create floor', 'error');
+    } finally {
+      setIsCreatingFloor(false);
+    }
+  };
 
   const activeShelf = rackDetails?.shelves.find((s) => s.shelfNumber === selectedShelfNumber);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Screen Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
         <div>
           <h1
             style={{
@@ -110,51 +208,163 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
             Floor Map & Zones
           </h1>
           <p style={{ color: 'var(--muted)', fontSize: '14px', margin: 0 }}>
-            Published spatial layout for <strong>{currentLibrary?.name}</strong>. Select any physical rack fixture to inspect shelves and physical titles.
+            Spatial layout for <strong>{currentLibrary?.name}</strong>. Select any physical rack fixture to inspect shelf contents and physical copies.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <Chip active>Level 1 &bull; Main Stacks</Chip>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={fetchFloorPlan}
-            disabled={loadingMap}
-            iconLeft={<RefreshCw size={14} className={loadingMap ? 'spin' : ''} />}
-          >
-            Refresh Map
-          </Button>
+        {/* Top Controls: Floor Switcher, Studio Toggle, Refresh */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Floor Selector */}
+          {floors.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {floors.map((fl) => {
+                const isCurrent = fl.floorId === (selectedFloor?.floorId || '');
+                return (
+                  <Chip
+                    key={fl.floorId}
+                    active={isCurrent}
+                    onClick={() => {
+                      setSelectedFloorId(fl.floorId);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    Level {fl.floorNumber}: {fl.name}
+                  </Chip>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Add Floor (Staff Only) */}
+          {isStaff && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setNewFloorNumber(floors.length + 1);
+                setNewFloorName(`Level ${floors.length + 1} - Stacks`);
+                setShowAddFloorDialog(true);
+              }}
+              iconLeft={<Plus size={14} />}
+            >
+              Add Level
+            </Button>
+          )}
+
+          {/* Staff Studio Toggle */}
+          {isStaff && selectedFloor && (
+            <Button
+              variant={isEditMode ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setIsEditMode(!isEditMode)}
+              iconLeft={isEditMode ? <Eye size={14} /> : <Edit3 size={14} />}
+            >
+              {isEditMode ? 'Exit Studio' : 'Edit Floor Plan'}
+            </Button>
+          )}
+
+          {!isEditMode && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={fetchPublishedFloorPlan}
+              disabled={loadingMap}
+              iconLeft={<RefreshCw size={14} className={loadingMap ? 'spin' : ''} />}
+            >
+              Refresh
+            </Button>
+          )}
         </div>
       </div>
 
-      {loadingMap ? (
-        <div style={{ padding: '60px', display: 'flex', justifyContent: 'center' }}>
-          <LoadingState message="Rendering published floor plan and spatial layouts..." />
-        </div>
-      ) : !floorPlan || floorPlan.fixtures.length === 0 ? (
-        <EmptyState
-          title="No Floor Plan Published"
-          description="No active floor plan or rack fixtures found for this library branch."
-          action={{
-            label: 'Refresh Map',
-            onClick: fetchFloorPlan,
+      {/* Mode 1: Floor Plan Studio (Editor Mode for Staff) */}
+      {isEditMode && selectedFloor ? (
+        <FloorPlanEditor
+          orgId={currentOrg!.organization.organizationId}
+          libraryId={currentLibrary!.libraryId}
+          floor={selectedFloor}
+          onFloorUpdated={() => {
+            fetchFloors();
+            fetchPublishedFloorPlan();
           }}
+          onClose={() => setIsEditMode(false)}
+        />
+      ) : loadingFloors ? (
+        <div style={{ padding: '60px', display: 'flex', justifyContent: 'center' }}>
+          <LoadingState message="Loading floors and spatial plans..." />
+        </div>
+      ) : floors.length === 0 ? (
+        <EmptyState
+          title="No Floor Levels Defined"
+          description={
+            isStaff
+              ? 'No floors have been created for this library yet. Click below to create Level 1.'
+              : 'No floor layouts have been configured for this library branch yet.'
+          }
+          action={
+            isStaff
+              ? {
+                  label: '+ Create Level 1 Floor',
+                  onClick: () => setShowAddFloorDialog(true),
+                }
+              : undefined
+          }
+        />
+      ) : loadingMap ? (
+        <div style={{ padding: '60px', display: 'flex', justifyContent: 'center' }}>
+          <LoadingState message="Rendering published floor map..." />
+        </div>
+      ) : !floorPlan || !floorPlan.fixtures || floorPlan.fixtures.length === 0 ? (
+        <EmptyState
+          title={`No Published Layout for ${selectedFloor?.name || 'This Level'}`}
+          description={
+            isStaff
+              ? 'This floor has draft elements or no published version yet. Enter Floor Plan Studio to design and publish the layout.'
+              : 'The spatial layout for this floor level is currently undergoing maintenance and has not been published.'
+          }
+          action={
+            isStaff
+              ? {
+                  label: 'Open Floor Plan Studio',
+                  onClick: () => setIsEditMode(true),
+                }
+              : {
+                  label: 'Refresh Map',
+                  onClick: fetchPublishedFloorPlan,
+                }
+          }
         />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px', alignItems: 'start' }}>
-          {/* LEFT: Interactive Floor Plan Canvas */}
+        /* Mode 2: Published Reader Viewer Mode */
+        <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: '24px', alignItems: 'start' }}>
+          {/* LEFT: Spatial Floor Plan Canvas */}
           <Card style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <MapPin size={18} style={{ color: 'var(--accent)' }} />
                 <strong style={{ fontSize: '16px', color: 'var(--text)' }}>
-                  {floorPlan.floorName} &bull; Reading & Stacks
+                  {floorPlan.floorName} &bull; Published Interactive Map
                 </strong>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                Canvas: {floorPlan.canvasWidth} &times; {floorPlan.canvasHeight} px
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                  Scale: {Math.round(zoomLevel * 100)}%
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setZoomLevel((z) => Math.max(0.5, Number((z - 0.1).toFixed(1))))}
+                >
+                  -
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setZoomLevel((z) => Math.min(1.2, Number((z + 0.1).toFixed(1))))}
+                >
+                  +
+                </Button>
+              </div>
             </div>
 
             {/* Map Legend */}
@@ -167,6 +377,7 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
                 borderRadius: '8px',
                 fontSize: '12px',
                 color: 'var(--text-secondary)',
+                flexWrap: 'wrap',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -175,93 +386,175 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }} />
-                <span>Contains Available Copies</span>
+                <span>Available Copies</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--border)' }} />
-                <span>No Copies</span>
+                <span>No Copies / Loaned</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#334155' }} />
+                <span>Walls & Desks</span>
               </div>
             </div>
 
-            {/* Spatial Grid representation */}
+            {/* Scaled Spatial Canvas */}
             <div
               style={{
                 position: 'relative',
                 background: 'var(--canvas)',
                 border: '1px solid var(--border)',
                 borderRadius: '16px',
-                padding: '24px',
-                minHeight: '380px',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gridTemplateRows: 'repeat(2, 1fr)',
-                gap: '20px',
+                minHeight: '420px',
+                overflow: 'auto',
+                padding: '16px',
               }}
             >
-              {floorPlan.fixtures.map((fixture) => {
-                const rackCode = fixture.linkedRackCode || 'A';
-                const isSelected = selectedRackCode.toUpperCase() === rackCode.toUpperCase();
-                const availCopies = fixture.availableCopiesCount || 0;
-                const hasCopies = availCopies > 0;
+              <div
+                style={{
+                  position: 'relative',
+                  width: `${floorPlan.canvasWidth}px`,
+                  height: `${floorPlan.canvasHeight}px`,
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: 'top left',
+                  background: 'var(--surface)',
+                  borderRadius: '12px',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {floorPlan.fixtures.map((fixture) => {
+                  const rackCode = fixture.linkedRackCode || '';
+                  const isRack = fixture.elementType === 'RACK' || (!fixture.elementType && rackCode);
+                  const isSelected = isRack && rackCode && selectedRackCode.toUpperCase() === rackCode.toUpperCase();
+                  const availCopies = fixture.availableCopiesCount || 0;
+                  const hasCopies = availCopies > 0;
 
-                return (
-                  <button
-                    key={fixture.elementId}
-                    onClick={() => setSelectedRackCode(rackCode)}
-                    style={{
-                      background: isSelected
-                        ? 'color-mix(in srgb, var(--accent) 15%, var(--surface))'
-                        : 'var(--surface)',
-                      border: isSelected
-                        ? '2px solid var(--accent)'
-                        : '1px solid var(--border)',
-                      borderRadius: '12px',
-                      padding: '16px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      textAlign: 'left',
-                      transition: 'all 0.2s ease',
-                      boxShadow: isSelected ? 'var(--shadow-md)' : 'none',
-                      position: 'relative',
-                      minHeight: '120px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>
-                          FIXTURE #{rackCode}
-                        </span>
-                        <h3 style={{ margin: '2px 0 0 0', fontSize: '18px', fontWeight: 800, color: 'var(--text)' }}>
-                          Rack {rackCode}
-                        </h3>
-                      </div>
-                      {isSelected && (
-                        <CheckCircle2 size={16} style={{ color: 'var(--accent)' }} />
-                      )}
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '12px' }}>
-                      <span
+                  // Render Non-Rack Elements (Wall, Door, Desk)
+                  if (!isRack) {
+                    const isWall = fixture.elementType === 'WALL';
+                    const isDoor = fixture.elementType === 'DOOR';
+                    return (
+                      <div
+                        key={fixture.elementId}
                         style={{
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          background: hasCopies ? '#10b981' : 'var(--muted)',
+                          position: 'absolute',
+                          left: `${fixture.x}px`,
+                          top: `${fixture.y}px`,
+                          width: `${fixture.width}px`,
+                          height: `${fixture.height}px`,
+                          transform: `rotate(${fixture.rotation}deg)`,
+                          transformOrigin: 'center center',
+                          background: isWall ? '#334155' : isDoor ? '#10b98122' : '#f59e0b22',
+                          border: isWall ? 'none' : isDoor ? '1px dashed #10b981' : '1px solid #f59e0b',
+                          borderRadius: isDoor ? '0 8px 0 0' : '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '11px',
+                          color: isWall ? '#fff' : 'var(--muted)',
+                          userSelect: 'none',
                         }}
-                      />
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: hasCopies ? '#10b981' : 'var(--muted)' }}>
-                        {availCopies} {availCopies === 1 ? 'copy' : 'copies'}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+                      >
+                        {fixture.label || fixture.elementType}
+                      </div>
+                    );
+                  }
+
+                  // Render Interactive Rack Element
+                  return (
+                    <button
+                      key={fixture.elementId}
+                      onClick={() => {
+                        if (rackCode) setSelectedRackCode(rackCode);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        left: `${fixture.x}px`,
+                        top: `${fixture.y}px`,
+                        width: `${fixture.width}px`,
+                        height: `${fixture.height}px`,
+                        transform: `rotate(${fixture.rotation}deg)`,
+                        transformOrigin: 'center center',
+                        background: isSelected
+                          ? 'color-mix(in srgb, var(--accent) 15%, var(--surface))'
+                          : 'var(--surface)',
+                        border: isSelected
+                          ? '2px solid var(--accent)'
+                          : '1px solid var(--border)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        padding: '8px',
+                        textAlign: 'left',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isSelected ? 'var(--shadow-md)' : 'var(--shadow-sm)',
+                        zIndex: isSelected ? 10 : 2,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>
+                          #{rackCode}
+                        </span>
+                        {isSelected && <CheckCircle2 size={13} style={{ color: 'var(--accent)' }} />}
+                      </div>
+
+                      <strong
+                        style={{
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          color: 'var(--text)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {fixture.label || `Rack ${rackCode}`}
+                      </strong>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span
+                          style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: hasCopies ? '#10b981' : 'var(--muted)',
+                          }}
+                        />
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: hasCopies ? '#10b981' : 'var(--muted)' }}>
+                          {availCopies} {availCopies === 1 ? 'copy' : 'copies'}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div style={{ fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic' }}>
-              * Visual spatial layout coordinates decoupled from logical database records.
+            {/* Quick Rack Switcher Pills */}
+            <div>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                Quick Rack Selector:
+              </span>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {floorPlan.fixtures
+                  .filter((f) => f.linkedRackCode)
+                  .map((f) => {
+                    const code = f.linkedRackCode!;
+                    const isSelected = selectedRackCode.toUpperCase() === code.toUpperCase();
+                    return (
+                      <Chip
+                        key={f.elementId}
+                        active={isSelected}
+                        onClick={() => setSelectedRackCode(code)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        Rack {code} ({f.availableCopiesCount || 0} avail)
+                      </Chip>
+                    );
+                  })}
+              </div>
             </div>
           </Card>
 
@@ -277,7 +570,7 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
                     {rackDetails ? `${rackDetails.rackName}` : `Rack ${selectedRackCode}`}
                   </h2>
                 </div>
-                <Chip active>Rack Code: F1-R{selectedRackCode}</Chip>
+                <Chip active>Rack Code: {selectedRackCode}</Chip>
               </div>
 
               {loadingRack ? (
@@ -291,9 +584,9 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
                   {/* Shelves List Tabs */}
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '8px' }}>
-                      SELECT SHELF (1 - 6):
+                      SELECT SHELF (1 - {rackDetails.shelves.length}):
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(6, rackDetails.shelves.length || 1)}, 1fr)`, gap: '6px' }}>
                       {rackDetails.shelves.map((shelf) => {
                         const isCurrent = shelf.shelfNumber === selectedShelfNumber;
                         const hasBooks = shelf.totalCopies > 0;
@@ -420,6 +713,66 @@ export const FloorPlanScreen: React.FC<FloorPlanScreenProps> = ({
           </div>
         </div>
       )}
+
+      {/* Add Floor Dialog (Staff Only) */}
+      <Dialog
+        isOpen={showAddFloorDialog}
+        onClose={() => setShowAddFloorDialog(false)}
+        title="Add Floor Level"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted)' }}>
+            Create a new floor level for <strong>{currentLibrary?.name}</strong>. You will be able to design its spatial layout in the Floor Plan Studio.
+          </p>
+
+          <FormField label="Floor Level Number">
+            <TextInput
+              type="number"
+              value={newFloorNumber}
+              onChange={(e) => setNewFloorNumber(parseInt(e.target.value, 10) || 1)}
+              min={1}
+            />
+          </FormField>
+
+          <FormField label="Floor Name / Zone Description">
+            <TextInput
+              value={newFloorName}
+              onChange={(e) => setNewFloorName(e.target.value)}
+              placeholder="e.g. Level 2 - Fiction & Media"
+            />
+          </FormField>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <FormField label="Canvas Width (px)">
+              <TextInput
+                type="number"
+                value={newCanvasWidth}
+                onChange={(e) => setNewCanvasWidth(parseInt(e.target.value, 10) || 1000)}
+                min={200}
+                max={4000}
+              />
+            </FormField>
+            <FormField label="Canvas Height (px)">
+              <TextInput
+                type="number"
+                value={newCanvasHeight}
+                onChange={(e) => setNewCanvasHeight(parseInt(e.target.value, 10) || 700)}
+                min={200}
+                max={4000}
+              />
+            </FormField>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+            <Button variant="secondary" onClick={() => setShowAddFloorDialog(false)} disabled={isCreatingFloor}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleCreateFloor} disabled={isCreatingFloor}>
+              {isCreatingFloor ? 'Creating...' : 'Create Floor & Open Studio'}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };

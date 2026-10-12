@@ -16,6 +16,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { FinesModule } from './modules/fines/fines.module';
 import { BackgroundJobsModule } from './modules/jobs/background-jobs.module';
 import { CommunityModule } from './modules/community/community.module';
+import { FloorPlanModule } from './modules/floor-plan/floor-plan.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CommunityModule } from './modules/community/community.module';
     FinesModule,
     BackgroundJobsModule,
     CommunityModule,
+    FloorPlanModule,
     HealthModule,
   ],
 })
