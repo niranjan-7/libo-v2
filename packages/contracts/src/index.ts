@@ -402,3 +402,140 @@ export interface CirculationDeskStatsResponse {
   pendingReservationsCount: number;
 }
 
+// ==========================================
+// 7. FINANCIALS, WALLETS & FINES
+// ==========================================
+export interface WalletDto {
+  walletId: string;
+  libraryId: string;
+  userId: string;
+  currencyCode: string;
+  balance: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WalletTransactionDto {
+  transactionId: string;
+  walletId: string;
+  fineId?: string | null;
+  loanId?: string | null;
+  transactionType: WalletTransactionType;
+  direction: LedgerDirection;
+  amount: number;
+  currencyCode: string;
+  idempotencyKey: string;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface TopUpRequest {
+  amount: number;
+  idempotencyKey?: string;
+  notes?: string;
+}
+
+export interface FineDto {
+  fineId: string;
+  libraryId: string;
+  readerUserId: string;
+  readerName?: string;
+  readerEmail?: string;
+  loanId?: string | null;
+  bookTitle?: string;
+  barcode?: string;
+  fineType: FineType;
+  fineDate?: string | null;
+  amount: number;
+  outstandingAmount: number;
+  status: FineStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PayFineRequest {
+  idempotencyKey?: string;
+}
+
+export interface WaiveFineRequest {
+  reason: string;
+}
+
+export interface CreateManualFineRequest {
+  readerUserId: string;
+  fineType: FineType;
+  amount: number;
+  loanId?: string;
+  notes?: string;
+}
+
+export interface GenerateOverdueFinesResponse {
+  finesGeneratedCount: number;
+  totalFineAmount: number;
+  loansCheckedCount: number;
+}
+
+// ==========================================
+// 8. NOTIFICATIONS & DELIVERIES
+// ==========================================
+export enum NotificationChannel {
+  IN_APP = 'IN_APP',
+  EMAIL = 'EMAIL',
+}
+
+export enum NotificationDeliveryStatus {
+  PENDING = 'PENDING',
+  SENT = 'SENT',
+  FAILED = 'FAILED',
+}
+
+export interface NotificationDeliveryDto {
+  deliveryId: string;
+  notificationId: string;
+  channel: NotificationChannel;
+  status: NotificationDeliveryStatus;
+  attemptCount: number;
+  sentAt?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface NotificationDto {
+  notificationId: string;
+  userId: string;
+  libraryId?: string | null;
+  eventType: string;
+  title: string;
+  body: string;
+  payload: Record<string, any>;
+  dedupeKey: string;
+  readAt?: string | null;
+  createdAt: string;
+  deliveries?: NotificationDeliveryDto[];
+}
+
+// ==========================================
+// 9. AUDIT LOGS & BACKGROUND JOBS
+// ==========================================
+export interface SystemAuditLogDto {
+  auditId: string;
+  libraryId?: string | null;
+  actorUserId: string;
+  actorName?: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  oldValue?: Record<string, any> | null;
+  newValue?: Record<string, any> | null;
+  traceId?: string | null;
+  createdAt: string;
+}
+
+export interface JobRunResultDto {
+  jobName: string;
+  success: boolean;
+  executedAt: string;
+  durationMs: number;
+  metrics: Record<string, any>;
+  error?: string;
+}
+

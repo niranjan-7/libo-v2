@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useToast } from './ui/Toast';
-import { OrgRole } from '@library/contracts';
+import { OrgRole, NotificationDto } from '@library/contracts';
+import { api } from '../api/client';
 import {
   BookOpen,
   Building2,
@@ -27,6 +28,7 @@ import {
   X,
   Barcode,
   ArrowRightLeft,
+  Bell,
 } from 'lucide-react';
 import { CreateOrgModal } from './CreateOrgModal';
 import { CreateLibraryModal } from './CreateLibraryModal';
@@ -111,6 +113,56 @@ export const DashboardShell: React.FC = () => {
   const [showCreateLibraryModal, setShowCreateLibraryModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showAppearanceDrawer, setShowAppearanceDrawer] = useState(false);
+  const [showNotificationsDrawer, setShowNotificationsDrawer] = useState(false);
+
+  // Live Notifications
+  const [notifications, setNotifications] = useState<NotificationDto[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const fetchNotifications = useCallback(async () => {
+    if (!currentOrg || !currentLibrary) return;
+    try {
+      const res = await api.notifications.getMyNotifications(
+        currentOrg.organization.organizationId,
+        currentLibrary.libraryId,
+      );
+      setNotifications(res.items);
+      setUnreadCount(res.unreadCount);
+    } catch {
+      // Background poll failure is silent
+    }
+  }, [currentOrg, currentLibrary]);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 20000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  const handleMarkAsRead = async (id: string) => {
+    if (!currentOrg || !currentLibrary) return;
+    try {
+      await api.notifications.markAsRead(currentOrg.organization.organizationId, currentLibrary.libraryId, id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.notificationId === id ? { ...n, readAt: new Date().toISOString() } : n)),
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch (err: any) {
+      showToast(err.message || 'Failed to mark notification as read', 'error');
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    if (!currentOrg || !currentLibrary) return;
+    try {
+      await api.notifications.markAllAsRead(currentOrg.organization.organizationId, currentLibrary.libraryId);
+      setNotifications((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
+      setUnreadCount(0);
+      showToast('All notifications marked as read', 'info');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to mark all as read', 'error');
+    }
+  };
 
   const canManageLibraries = currentRole === OrgRole.OWNER || currentRole === OrgRole.ADMIN;
   const canInviteMembers = currentRole === OrgRole.OWNER || currentRole === OrgRole.ADMIN;
@@ -404,6 +456,38 @@ export const DashboardShell: React.FC = () => {
             aria-label="Customize theme & appearance"
           >
             <Palette size={16} />
+          </button>
+
+          {/* Notifications Trigger */}
+          <button
+            onClick={() => setShowNotificationsDrawer(true)}
+            className="icon-btn"
+            style={{ position: 'relative' }}
+            title="View notifications"
+            aria-label={`Notifications ${unreadCount > 0 ? `(${unreadCount} unread)` : ''}`}
+          >
+            <Bell size={16} />
+            {unreadCount > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-3px',
+                  right: '-3px',
+                  background: 'var(--status-danger-text)',
+                  color: '#fff',
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  borderRadius: '10px',
+                  padding: '1px 5px',
+                  minWidth: '15px',
+                  textAlign: 'center',
+                  lineHeight: '13px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.25)',
+                }}
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
 
           {/* Dark Mode Toggle */}
@@ -742,6 +826,176 @@ export const DashboardShell: React.FC = () => {
         isOpen={showAppearanceDrawer}
         onClose={() => setShowAppearanceDrawer(false)}
       />
+
+      {/* Notifications Drawer */}
+      {showNotificationsDrawer && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            background: 'rgba(0,0,0,0.4)',
+          }}
+          onClick={() => setShowNotificationsDrawer(false)}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '420px',
+              height: '100%',
+              background: 'var(--canvas)',
+              borderLeft: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: 'var(--shadow-lg)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bell size={18} color="var(--accent)" />
+                <span style={{ fontWeight: 700, fontSize: '15px' }}>Notifications</span>
+                {unreadCount > 0 && (
+                  <span className="pill blue" style={{ fontSize: '10px' }}>
+                    {unreadCount} new
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAllAsRead}
+                    className="btn"
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                  >
+                    Mark all read
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowNotificationsDrawer(false)}
+                  className="icon-btn"
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
+              {notifications.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--muted)' }}>
+                  <Bell size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+                  <div style={{ fontWeight: 600 }}>No notifications yet</div>
+                  <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                    Loan due dates, hold pickup updates, and fines will appear here.
+                  </div>
+                </div>
+              ) : (
+                notifications.map((n) => {
+                  const isUnread = !n.readAt;
+                  return (
+                    <div
+                      key={n.notificationId}
+                      onClick={() => isUnread && handleMarkAsRead(n.notificationId)}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid',
+                        borderColor: isUnread ? 'var(--accent)' : 'var(--border)',
+                        background: isUnread ? 'var(--canvas-subtle)' : 'var(--canvas)',
+                        cursor: isUnread ? 'pointer' : 'default',
+                        transition: 'all 0.15s ease',
+                        position: 'relative',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          justifyContent: 'space-between',
+                          gap: '8px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: isUnread ? 700 : 600,
+                            fontSize: '13px',
+                            color: isUnread ? 'var(--fg)' : 'var(--muted)',
+                          }}
+                        >
+                          {n.title}
+                        </div>
+                        {isUnread && (
+                          <span
+                            style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              background: 'var(--accent)',
+                              display: 'inline-block',
+                              marginTop: '4px',
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          color: 'var(--muted)',
+                          marginTop: '4px',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {n.body}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '10px',
+                          color: 'var(--muted)',
+                          marginTop: '8px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <span>
+                          {new Date(n.createdAt).toLocaleDateString()}{' '}
+                          {new Date(n.createdAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                        <span style={{ fontFamily: 'monospace', textTransform: 'uppercase', opacity: 0.8 }}>
+                          {n.eventType}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

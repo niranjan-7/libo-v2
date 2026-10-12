@@ -22,6 +22,17 @@ import {
   CreateReservationRequest,
   ReadyForPickupRequest,
   CirculationDeskStatsResponse,
+  WalletDto,
+  WalletTransactionDto,
+  TopUpRequest,
+  FineDto,
+  PayFineRequest,
+  WaiveFineRequest,
+  CreateManualFineRequest,
+  GenerateOverdueFinesResponse,
+  NotificationDto,
+  SystemAuditLogDto,
+  JobRunResultDto,
 } from '@library/contracts';
 
 const API_BASE = '/api/v1';
@@ -342,6 +353,168 @@ export const api = {
           body: JSON.stringify(body),
         },
       );
+    },
+  },
+  wallet: {
+    getMyWallet: async (orgId: string, libraryId: string): Promise<WalletDto> => {
+      return request<WalletDto>(`/organizations/${orgId}/libraries/${libraryId}/wallet/my-wallet`);
+    },
+    getMyTransactions: async (
+      orgId: string,
+      libraryId: string,
+      params?: { limit?: number; offset?: number },
+    ): Promise<{ items: WalletTransactionDto[]; total: number; balance: number }> => {
+      const q = new URLSearchParams();
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return request(`/organizations/${orgId}/libraries/${libraryId}/wallet/my-transactions${qs}`);
+    },
+    topUp: async (
+      orgId: string,
+      libraryId: string,
+      body: TopUpRequest,
+    ): Promise<{ wallet: WalletDto; transaction: WalletTransactionDto; isDuplicate: boolean }> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/wallet/topup`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+  },
+  fines: {
+    getFines: async (
+      orgId: string,
+      libraryId: string,
+      params?: { readerUserId?: string; status?: string; fineType?: string; loanId?: string; limit?: number; offset?: number },
+    ): Promise<{ items: FineDto[]; total: number; totalOutstanding: number }> => {
+      const q = new URLSearchParams();
+      if (params?.readerUserId) q.set('readerUserId', params.readerUserId);
+      if (params?.status) q.set('status', params.status);
+      if (params?.fineType) q.set('fineType', params.fineType);
+      if (params?.loanId) q.set('loanId', params.loanId);
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return request(`/organizations/${orgId}/libraries/${libraryId}/fines${qs}`);
+    },
+    createManualFine: async (
+      orgId: string,
+      libraryId: string,
+      body: CreateManualFineRequest,
+    ): Promise<FineDto> => {
+      return request<FineDto>(`/organizations/${orgId}/libraries/${libraryId}/fines`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    payFine: async (
+      orgId: string,
+      libraryId: string,
+      fineId: string,
+      body?: PayFineRequest,
+    ): Promise<{ fine: FineDto; newWalletBalance: number }> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/fines/${fineId}/pay`, {
+        method: 'POST',
+        body: JSON.stringify(body || {}),
+      });
+    },
+    waiveFine: async (
+      orgId: string,
+      libraryId: string,
+      fineId: string,
+      body: WaiveFineRequest,
+    ): Promise<FineDto> => {
+      return request<FineDto>(`/organizations/${orgId}/libraries/${libraryId}/fines/${fineId}/waive`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    generateOverdueFines: async (
+      orgId: string,
+      libraryId: string,
+    ): Promise<GenerateOverdueFinesResponse> => {
+      return request<GenerateOverdueFinesResponse>(
+        `/organizations/${orgId}/libraries/${libraryId}/fines/generate-overdue`,
+        {
+          method: 'POST',
+        },
+      );
+    },
+  },
+  notifications: {
+    getMyNotifications: async (
+      orgId: string,
+      libraryId: string,
+      params?: { unreadOnly?: boolean; limit?: number; offset?: number },
+    ): Promise<{ items: NotificationDto[]; total: number; unreadCount: number }> => {
+      const q = new URLSearchParams();
+      if (params?.unreadOnly) q.set('unreadOnly', 'true');
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return request(`/organizations/${orgId}/libraries/${libraryId}/notifications${qs}`);
+    },
+    markAsRead: async (
+      orgId: string,
+      libraryId: string,
+      notificationId: string,
+    ): Promise<NotificationDto> => {
+      return request<NotificationDto>(
+        `/organizations/${orgId}/libraries/${libraryId}/notifications/${notificationId}/read`,
+        {
+          method: 'POST',
+        },
+      );
+    },
+    markAllAsRead: async (
+      orgId: string,
+      libraryId: string,
+    ): Promise<{ affectedCount: number }> => {
+      return request(
+        `/organizations/${orgId}/libraries/${libraryId}/notifications/read-all`,
+        {
+          method: 'POST',
+        },
+      );
+    },
+  },
+  auditLogs: {
+    getAuditLogs: async (
+      orgId: string,
+      libraryId: string,
+      params?: { actorUserId?: string; action?: string; entityType?: string; limit?: number; offset?: number },
+    ): Promise<{ items: SystemAuditLogDto[]; total: number }> => {
+      const q = new URLSearchParams();
+      if (params?.actorUserId) q.set('actorUserId', params.actorUserId);
+      if (params?.action) q.set('action', params.action);
+      if (params?.entityType) q.set('entityType', params.entityType);
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return request(`/organizations/${orgId}/libraries/${libraryId}/audit-logs${qs}`);
+    },
+  },
+  jobs: {
+    runOverdueFines: async (orgId: string, libraryId: string): Promise<JobRunResultDto> => {
+      return request<JobRunResultDto>(`/organizations/${orgId}/libraries/${libraryId}/jobs/run-overdue-fines`, {
+        method: 'POST',
+      });
+    },
+    runHoldExpiries: async (orgId: string, libraryId: string): Promise<JobRunResultDto> => {
+      return request<JobRunResultDto>(`/organizations/${orgId}/libraries/${libraryId}/jobs/run-hold-expiries`, {
+        method: 'POST',
+      });
+    },
+    runNotificationDeliveries: async (orgId: string, libraryId: string): Promise<JobRunResultDto> => {
+      return request<JobRunResultDto>(
+        `/organizations/${orgId}/libraries/${libraryId}/jobs/run-notification-deliveries`,
+        {
+          method: 'POST',
+        },
+      );
+    },
+    getStatus: async (orgId: string, libraryId: string): Promise<{ activeRunningJobs: string[] }> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/jobs/status`);
     },
   },
 };

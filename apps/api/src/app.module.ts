@@ -10,6 +10,11 @@ import { AuthModule } from './modules/auth/auth.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { CirculationModule } from './modules/circulation/circulation.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { FinesModule } from './modules/fines/fines.module';
+import { BackgroundJobsModule } from './modules/jobs/background-jobs.module';
 
 @Module({
   imports: [
@@ -28,6 +33,11 @@ import { CirculationModule } from './modules/circulation/circulation.module';
     OrganizationsModule,
     CatalogModule,
     CirculationModule,
+    AuditModule,
+    NotificationsModule,
+    WalletModule,
+    FinesModule,
+    BackgroundJobsModule,
     HealthModule,
   ],
 })

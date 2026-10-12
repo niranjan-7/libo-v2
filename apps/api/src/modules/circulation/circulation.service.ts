@@ -4,9 +4,12 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { TenantConnectionService } from '../tenant-connection/tenant-connection.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../audit/audit.service';
 import {
   CirculationPolicyDto,
   LoanDto,
@@ -42,7 +45,11 @@ const DEFAULT_POLICY: CirculationPolicyDto = {
 export class CirculationService {
   private readonly logger = new Logger(CirculationService.name);
 
-  constructor(private readonly tenantConnectionService: TenantConnectionService) {}
+  constructor(
+    private readonly tenantConnectionService: TenantConnectionService,
+    @Optional() private readonly notificationsService?: NotificationsService,
+    @Optional() private readonly auditService?: AuditService,
+  ) {}
 
   private extractRow<T = any>(result: any): T {
     if (!result) return {} as T;
@@ -292,6 +299,38 @@ export class CirculationService {
         );
       }
 
+      // 8. Notifications and Audit Logging
+      if (this.notificationsService) {
+        await this.notificationsService.createNotification(
+          organizationId,
+          {
+            userId: dto.readerUserId,
+            libraryId,
+            eventType: 'LOAN_CHECKED_OUT',
+            title: `Book Checked Out: ${copy.bookTitle}`,
+            body: `You checked out "${copy.bookTitle}" (${copy.barcode}). Due on ${dueAt.toLocaleDateString()}.`,
+            dedupeKey: `notif-loan-${newLoan.loan_id}`,
+            payload: { loanId: newLoan.loan_id, barcode: copy.barcode, dueAt: dueAt.toISOString() },
+          },
+          manager,
+        );
+      }
+
+      if (this.auditService) {
+        await this.auditService.log(
+          organizationId,
+          {
+            libraryId,
+            actorUserId: staffUserId,
+            action: 'CHECKOUT_BOOK',
+            entityType: 'LOAN',
+            entityId: newLoan.loan_id,
+            newValue: { readerUserId: dto.readerUserId, barcode: copy.barcode, dueAt: dueAt.toISOString() },
+          },
+          manager,
+        );
+      }
+
       this.logger.log(
         `Loan created: copy ${dto.barcode} checked out to reader ${dto.readerUserId}. Due: ${dueAt.toISOString()}`,
       );
@@ -477,6 +516,40 @@ export class CirculationService {
       this.logger.log(
         `Copy ${dto.barcode} returned. Final status: ${finalCopyStatus}. Next hold: ${nextReservation ? nextReservation.reservationId : 'none'}`,
       );
+
+      // Notifications and Audit Logging
+      if (closedLoan) {
+        if (this.notificationsService) {
+          await this.notificationsService.createNotification(
+            organizationId,
+            {
+              userId: closedLoan.readerUserId,
+              libraryId,
+              eventType: 'LOAN_RETURNED',
+              title: `Book Returned: ${closedLoan.bookTitle}`,
+              body: `You returned "${closedLoan.bookTitle}" (${closedLoan.barcode}). Thank you!`,
+              dedupeKey: `notif-return-${closedLoan.loanId}`,
+              payload: { loanId: closedLoan.loanId, barcode: closedLoan.barcode, returnedAt: closedLoan.returnedAt },
+            },
+            manager,
+          );
+        }
+
+        if (this.auditService) {
+          await this.auditService.log(
+            organizationId,
+            {
+              libraryId,
+              actorUserId: staffUserId,
+              action: 'RETURN_BOOK',
+              entityType: 'LOAN',
+              entityId: closedLoan.loanId,
+              newValue: { barcode: copy.barcode, condition: dto.condition, nextStatus: finalCopyStatus },
+            },
+            manager,
+          );
+        }
+      }
 
       return {
         loan: closedLoan,
@@ -729,6 +802,44 @@ export class CirculationService {
         `Reservation ${reservationId} marked READY_FOR_PICKUP. Deadline: ${pickupDeadline.toISOString()}`,
       );
 
+      if (this.notificationsService) {
+        await this.notificationsService.createNotification(
+          organizationId,
+          {
+            userId: updated.reader_user_id,
+            libraryId,
+            eventType: 'RESERVATION_READY_FOR_PICKUP',
+            title: `Ready for Pickup: ${reservation.bookTitle}`,
+            body: `Your reserved copy of "${reservation.bookTitle}" (${reservation.assignedBarcode || ''}) is ready for pickup. Please collect it within ${policy.pickupWindowHours} hours (by ${pickupDeadline.toLocaleDateString()}).`,
+            dedupeKey: `notif-res-ready-${reservationId}`,
+            payload: {
+              reservationId,
+              pickupDeadline: pickupDeadline.toISOString(),
+              pickupLocationId,
+            },
+          },
+          manager,
+        );
+      }
+
+      if (this.auditService) {
+        await this.auditService.log(
+          organizationId,
+          {
+            libraryId,
+            actorUserId: staffUserId,
+            action: 'MARK_READY_FOR_PICKUP',
+            entityType: 'RESERVATION',
+            entityId: reservationId,
+            newValue: {
+              pickupDeadline: pickupDeadline.toISOString(),
+              pickupLocationId,
+            },
+          },
+          manager,
+        );
+      }
+
       return {
         reservationId: updated.reservation_id,
         libraryId,
@@ -782,6 +893,37 @@ export class CirculationService {
            WHERE "reservation_id" = $1`,
           [res.reservation_id],
         );
+
+        if (this.notificationsService) {
+          await this.notificationsService.createNotification(
+            organizationId,
+            {
+              userId: res.reader_user_id,
+              libraryId,
+              eventType: 'RESERVATION_EXPIRED',
+              title: `Hold Expired: Reservation #${res.reservation_id}`,
+              body: `Your hold reservation has expired as it was not collected within the pickup window.`,
+              dedupeKey: `notif-res-expired-${res.reservation_id}`,
+              payload: { reservationId: res.reservation_id, expiredAt: new Date().toISOString() },
+            },
+            manager,
+          );
+        }
+
+        if (this.auditService) {
+          await this.auditService.log(
+            organizationId,
+            {
+              libraryId,
+              actorUserId: 'SYSTEM',
+              action: 'EXPIRE_RESERVATION',
+              entityType: 'RESERVATION',
+              entityId: res.reservation_id,
+              newValue: { expiredAt: new Date().toISOString() },
+            },
+            manager,
+          );
+        }
 
         if (!res.assigned_copy_id) continue;
 
@@ -934,6 +1076,44 @@ export class CirculationService {
       this.logger.log(
         `Loan ${loanId} extended (+${policy.extensionIncrementDays}d). New due date: ${newDueAt.toISOString()}`,
       );
+
+      if (this.notificationsService) {
+        await this.notificationsService.createNotification(
+          organizationId,
+          {
+            userId: updatedLoan.reader_user_id,
+            libraryId,
+            eventType: 'LOAN_EXTENDED',
+            title: `Loan Extended: ${loan.bookTitle}`,
+            body: `Your loan for "${loan.bookTitle}" has been extended. New due date is ${newDueAt.toLocaleDateString()}.`,
+            dedupeKey: `notif-loan-extend-${loan.loan_id}-${updatedLoan.extension_count}`,
+            payload: {
+              loanId: loan.loan_id,
+              newDueAt: newDueAt.toISOString(),
+              extensionCount: updatedLoan.extension_count,
+            },
+          },
+          manager,
+        );
+      }
+
+      if (this.auditService) {
+        await this.auditService.log(
+          organizationId,
+          {
+            libraryId,
+            actorUserId,
+            action: 'EXTEND_LOAN',
+            entityType: 'LOAN',
+            entityId: loan.loan_id,
+            newValue: {
+              newDueAt: newDueAt.toISOString(),
+              extensionCount: updatedLoan.extension_count,
+            },
+          },
+          manager,
+        );
+      }
 
       return {
         loanId: updatedLoan.loan_id,
