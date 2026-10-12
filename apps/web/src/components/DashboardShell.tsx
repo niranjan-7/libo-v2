@@ -25,6 +25,7 @@ import {
   Sparkles,
   Menu,
   X,
+  Barcode,
 } from 'lucide-react';
 import { CreateOrgModal } from './CreateOrgModal';
 import { CreateLibraryModal } from './CreateLibraryModal';
@@ -32,6 +33,10 @@ import { InviteMemberModal } from './InviteMemberModal';
 import { AppearanceDrawer } from './theme/AppearanceDrawer';
 import { ComponentShowcase } from './showcase/ComponentShowcase';
 import { BookCard, BookItem } from './ui/BookCard';
+import { CatalogScreen } from './catalog/CatalogScreen';
+import { BookDetailsScreen } from './catalog/BookDetailsScreen';
+import { FloorPlanScreen } from './locations/FloorPlanScreen';
+import { InventoryScreen } from './inventory/InventoryScreen';
 
 const SAMPLE_OVERVIEW_BOOKS: BookItem[] = [
   {
@@ -91,7 +96,11 @@ export const DashboardShell: React.FC = () => {
   const { theme, toggleDarkMode } = useTheme();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'circulation' | 'map' | 'analytics' | 'settings' | 'members' | 'showcase'>('overview');
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'catalog' | 'inventory' | 'circulation' | 'map' | 'analytics' | 'settings' | 'members' | 'showcase'
+  >('overview');
+  const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
+  const [selectedRackCode, setSelectedRackCode] = useState<string | null>('A');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   // Modal visibility states
@@ -153,7 +162,7 @@ export const DashboardShell: React.FC = () => {
           </button>
 
           <button
-            onClick={() => { setActiveTab('catalog'); setIsMobileOpen(false); }}
+            onClick={() => { setActiveTab('catalog'); setSelectedBookId(null); setIsMobileOpen(false); }}
             className={`side-nav-item ${activeTab === 'catalog' ? 'active' : ''}`}
           >
             <span className="nav-number">02</span>
@@ -162,17 +171,15 @@ export const DashboardShell: React.FC = () => {
             </span>
           </button>
 
-          {canManageLibraries && (
-            <button
-              onClick={() => { setActiveTab('circulation'); setIsMobileOpen(false); }}
-              className={`side-nav-item ${activeTab === 'circulation' ? 'active' : ''}`}
-            >
-              <span className="nav-number">03</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Clock size={16} /> Circulation Desk
-              </span>
-            </button>
-          )}
+          <button
+            onClick={() => { setActiveTab('inventory'); setIsMobileOpen(false); }}
+            className={`side-nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
+          >
+            <span className="nav-number">03</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Barcode size={16} /> Copy Inventory
+            </span>
+          </button>
 
           <button
             onClick={() => { setActiveTab('map'); setIsMobileOpen(false); }}
@@ -436,6 +443,44 @@ export const DashboardShell: React.FC = () => {
                 <Plus size={16} /> Create Organization Now
               </button>
             </div>
+          ) : activeTab === 'catalog' ? (
+            selectedBookId ? (
+              <BookDetailsScreen
+                bookId={selectedBookId}
+                onBack={() => setSelectedBookId(null)}
+                onLocateOnMap={(rack) => {
+                  setSelectedRackCode(rack);
+                  setActiveTab('map');
+                }}
+              />
+            ) : (
+              <CatalogScreen
+                onSelectBook={(id) => setSelectedBookId(id)}
+                onLocateRack={(rack) => {
+                  setSelectedRackCode(rack);
+                  setActiveTab('map');
+                }}
+              />
+            )
+          ) : activeTab === 'inventory' ? (
+            <InventoryScreen
+              onSelectBook={(id) => {
+                setSelectedBookId(id);
+                setActiveTab('catalog');
+              }}
+              onLocateRack={(rack) => {
+                setSelectedRackCode(rack);
+                setActiveTab('map');
+              }}
+            />
+          ) : activeTab === 'map' ? (
+            <FloorPlanScreen
+              initialRackCode={selectedRackCode || 'A'}
+              onSelectBook={(id) => {
+                setSelectedBookId(id);
+                setActiveTab('catalog');
+              }}
+            />
           ) : (
             <>
               {/* Page Header */}

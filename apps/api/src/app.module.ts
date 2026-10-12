@@ -8,6 +8,7 @@ import { ControlPlaneModule } from './modules/control-plane/control-plane.module
 import { TenantConnectionModule } from './modules/tenant-connection/tenant-connection.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
     TenantConnectionModule,
     AuthModule,
     OrganizationsModule,
+    CatalogModule,
     HealthModule,
   ],
 })

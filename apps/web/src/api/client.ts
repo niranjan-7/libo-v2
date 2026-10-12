@@ -8,6 +8,12 @@ import {
   AcceptInviteRequest,
   OrganizationDetailsResponse,
   LibraryDto,
+  CatalogSearchResponse,
+  BookWorkDto,
+  BookCopyDto,
+  InventoryStatsResponse,
+  FloorPlanResponse,
+  RackDetailResponse,
 } from '@library/contracts';
 
 const API_BASE = '/api/v1';
@@ -107,6 +113,80 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       });
+    },
+  },
+  catalog: {
+    search: async (
+      orgId: string,
+      libraryId: string,
+      params?: { search?: string; category?: string; status?: string; sort?: string; limit?: number; offset?: number },
+    ): Promise<CatalogSearchResponse> => {
+      const q = new URLSearchParams();
+      if (params?.search) q.set('search', params.search);
+      if (params?.category) q.set('category', params.category);
+      if (params?.status) q.set('status', params.status);
+      if (params?.sort) q.set('sort', params.sort);
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return request<CatalogSearchResponse>(`/organizations/${orgId}/libraries/${libraryId}/catalog${qs}`);
+    },
+    getBookDetails: async (
+      orgId: string,
+      libraryId: string,
+      bookId: string,
+    ): Promise<BookWorkDto> => {
+      return request<BookWorkDto>(`/organizations/${orgId}/libraries/${libraryId}/catalog/${bookId}`);
+    },
+    seedDemo: async (
+      orgId: string,
+      libraryId: string,
+    ): Promise<{ success: boolean; message: string }> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/catalog/seed`, {
+        method: 'POST',
+      });
+    },
+  },
+  inventory: {
+    getInventory: async (
+      orgId: string,
+      libraryId: string,
+      params?: { search?: string; status?: string; condition?: string; limit?: number; offset?: number },
+    ): Promise<{ items: BookCopyDto[]; stats: InventoryStatsResponse; total: number }> => {
+      const q = new URLSearchParams();
+      if (params?.search) q.set('search', params.search);
+      if (params?.status) q.set('status', params.status);
+      if (params?.condition) q.set('condition', params.condition);
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.offset) q.set('offset', String(params.offset));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return request(`/organizations/${orgId}/libraries/${libraryId}/inventory${qs}`);
+    },
+    createCopy: async (
+      orgId: string,
+      libraryId: string,
+      body: { editionId: string; barcode: string; condition?: string; status?: string; homeLocationId: string },
+    ): Promise<BookCopyDto> => {
+      return request<BookCopyDto>(`/organizations/${orgId}/libraries/${libraryId}/inventory`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+  },
+  floorPlan: {
+    getFloorPlan: async (
+      orgId: string,
+      libraryId: string,
+      floorNumber: number = 1,
+    ): Promise<FloorPlanResponse> => {
+      return request<FloorPlanResponse>(`/organizations/${orgId}/libraries/${libraryId}/floor-plan?floor=${floorNumber}`);
+    },
+    getRackShelves: async (
+      orgId: string,
+      libraryId: string,
+      rackCode: string,
+    ): Promise<RackDetailResponse> => {
+      return request<RackDetailResponse>(`/organizations/${orgId}/libraries/${libraryId}/locations/racks/${rackCode}/shelves`);
     },
   },
 };

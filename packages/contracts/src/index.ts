@@ -173,3 +173,145 @@ export interface OrganizationDetailsResponse {
   role: OrgRole;
   libraries: LibraryDto[];
 }
+
+// ==========================================
+// 5. CATALOG & PHYSICAL INVENTORY CONTRACTS
+// ==========================================
+export interface AuthorDto {
+  authorId: string;
+  name: string;
+  biography?: string;
+}
+
+export interface PublisherDto {
+  publisherId: string;
+  name: string;
+}
+
+export interface CategoryDto {
+  categoryId: string;
+  name: string;
+}
+
+export interface LocationDto {
+  locationId: string;
+  libraryId: string;
+  floorId: string;
+  parentLocationId?: string | null;
+  locationType: 'ZONE' | 'RACK' | 'SHELF' | 'SERVICE_DESK' | 'RETURNS_DESK';
+  code: string;
+  name: string;
+}
+
+export interface BookCopyDto {
+  copyId: string;
+  libraryId: string;
+  editionId: string;
+  barcode: string;
+  status: CopyStatus;
+  condition: CopyCondition;
+  homeLocation: LocationDto;
+  currentLocation?: LocationDto | null;
+  bookId: string;
+  bookTitle: string;
+  editionLabel: string;
+  format: string;
+  isbn?: string;
+  authorName?: string;
+}
+
+export interface BookEditionDto {
+  editionId: string;
+  bookId: string;
+  publisher: PublisherDto;
+  isbn?: string;
+  editionLabel: string;
+  format: string;
+  language: string;
+  publicationDate?: string;
+  replacementCost: number;
+  copies?: BookCopyDto[];
+}
+
+export interface BookWorkDto {
+  bookId: string;
+  title: string;
+  subtitle?: string;
+  synopsis?: string;
+  coverUrl?: string;
+  status: string;
+  authors: AuthorDto[];
+  categories: CategoryDto[];
+  editions?: BookEditionDto[];
+  totalCopies: number;
+  availableCopies: number;
+  averageRating: number;
+  reviewCount: number;
+  publicationYear?: number;
+  createdAt: string;
+}
+
+export interface CatalogQueryParams {
+  search?: string;
+  category?: string;
+  status?: string;
+  sort?: 'relevance' | 'title' | 'year';
+  limit?: number;
+  offset?: number;
+}
+
+export interface CatalogSearchResponse {
+  items: BookWorkDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface FloorPlanFixtureDto {
+  elementId: string;
+  elementType: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  linkedLocationId?: string | null;
+  linkedRackCode?: string | null;
+  hasBooks?: boolean;
+  availableCopiesCount?: number;
+}
+
+export interface FloorPlanResponse {
+  floorId: string;
+  floorName: string;
+  floorNumber: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  versionNumber: number;
+  fixtures: FloorPlanFixtureDto[];
+}
+
+export interface ShelfCopiesDto {
+  shelfNumber: number;
+  shelfLocationId: string;
+  shelfCode: string;
+  totalCopies: number;
+  availableCopies: number;
+  uniqueTitlesCount: number;
+  copies: BookCopyDto[];
+}
+
+export interface RackDetailResponse {
+  rackCode: string;
+  rackName: string;
+  rackLocationId: string;
+  floorName: string;
+  shelves: ShelfCopiesDto[];
+}
+
+export interface InventoryStatsResponse {
+  totalCopies: number;
+  availableCopies: number;
+  loanedCopies: number;
+  exceptionsCount: number;
+}
