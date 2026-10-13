@@ -8,6 +8,7 @@ import { OrgInvitationEntity } from '../control-plane/entities/org-invitation.en
 import { TenantDatabaseRegistryEntity } from '../control-plane/entities/tenant-registry.entity';
 import { ControlPlaneAuditLogEntity } from '../control-plane/entities/control-plane-audit.entity';
 import { InitialTenantSchema1700000000001 } from '../tenant/migrations/1700000000001-InitialTenantSchema';
+import { CreateReaderAccessRequests1700000000002 } from '../tenant/migrations/1700000000002-CreateReaderAccessRequests';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../../../.env') });
 
@@ -55,7 +56,7 @@ async function run() {
       username: process.env.TENANT_DB_USER || 'postgres',
       password: process.env.TENANT_DB_PASSWORD || 'postgres',
       database: tenant.database_name,
-      migrations: [InitialTenantSchema1700000000001],
+      migrations: [InitialTenantSchema1700000000001, CreateReaderAccessRequests1700000000002],
       synchronize: false,
       logging: false,
     });

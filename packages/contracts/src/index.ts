@@ -160,7 +160,7 @@ export interface CreateLibraryRequest {
 
 export interface InviteMemberRequest {
   email: string;
-  proposedRole: OrgRole;
+  proposedRole: OrgRole | 'LIBRARIAN';
   targetLibraryId?: string;
 }
 
@@ -172,6 +172,22 @@ export interface OrganizationDetailsResponse {
   organization: OrganizationDto;
   role: OrgRole;
   libraries: LibraryDto[];
+}
+
+export interface OrganizationMemberDto {
+  userId: string;
+  email: string;
+  displayName: string;
+  role: string;
+  libraryRole?: string;
+  status: string;
+  joinedAt: string;
+}
+
+export interface UpdateMemberAccessRequest {
+  role?: OrgRole | 'OWNER' | 'ADMIN' | 'MEMBER' | 'LIBRARIAN' | 'READER' | string;
+  status?: 'ACTIVE' | 'SUSPENDED';
+  targetLibraryId?: string;
 }
 
 // ==========================================
@@ -409,6 +425,30 @@ export interface RackDetailResponse {
   rackLocationId: string;
   floorName: string;
   shelves: ShelfCopiesDto[];
+}
+
+export interface RackCirculationHeatmapDto {
+  rackCode: string;
+  rackName?: string;
+  locationId: string;
+  totalLoans: number;
+  activeLoans: number;
+  totalCopies: number;
+  turnoverRate: number;
+  heatScore: number; // Normalized 0.0 to 1.0 relative to floor peak
+  topGenre?: string;
+  topBookTitle?: string;
+}
+
+export interface FloorCirculationHeatmapResponse {
+  floorId: string;
+  floorName: string;
+  floorNumber: number;
+  timeRange: '30d' | '90d' | 'all';
+  totalFloorLoans: number;
+  peakRackCode?: string;
+  peakLoanCount: number;
+  racks: RackCirculationHeatmapDto[];
 }
 
 export interface InventoryStatsResponse {
@@ -783,4 +823,59 @@ export interface SharedReviewResponse {
   bookTitle: string;
   accessLevel: 'PUBLIC' | 'AUTHOR_OR_STAFF';
 }
+
+// ==========================================
+// 14. LIBRARY DIRECTORY & ACCESS REQUESTS
+// ==========================================
+export type ReaderAccessStatus = 'ACTIVE' | 'PENDING' | 'REJECTED' | 'NONE';
+
+export interface LibraryDirectoryEntryDto {
+  libraryId: string;
+  organizationId: string;
+  organizationName: string;
+  name: string;
+  slug: string;
+  timezone: string;
+  status: string;
+  membershipStatus: ReaderAccessStatus;
+  pendingRequestId?: string;
+  createdAt: string;
+}
+
+export interface ReaderAccessRequestDto {
+  requestId: string;
+  libraryId: string;
+  libraryName?: string;
+  organizationId?: string;
+  userId: string;
+  applicantName: string;
+  applicantEmail: string;
+  notes?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reviewedByUserId?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
+}
+
+export interface CreateAccessRequestRequest {
+  notes?: string;
+}
+
+export interface ReviewAccessRequestRequest {
+  reason?: string;
+}
+
+export interface UserLibraryMembershipDto {
+  libraryId: string;
+  libraryName: string;
+  librarySlug: string;
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  role: string;
+  status: string;
+  joinedAt: string;
+}
+
 

@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
   HttpCode,
@@ -24,6 +25,7 @@ import {
   PublishFloorPlanResponse,
   LogicalRackDto,
   FloorPlanResponse,
+  FloorCirculationHeatmapResponse,
   OrgRole,
 } from '@library/contracts';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -136,6 +138,21 @@ export class FloorPlanController {
     @Param('floorNumber') floorNumber: string,
   ): Promise<FloorPlanResponse> {
     return this.floorPlanService.getPublishedFloorPlan(orgId, libraryId, parseInt(floorNumber, 10));
+  }
+
+  @Get(':floorId/heatmap')
+  async getCirculationHeatmap(
+    @Param('orgId') orgId: string,
+    @Param('libraryId') libraryId: string,
+    @Param('floorId') floorId: string,
+    @Query('timeRange') timeRange?: '30d' | '90d' | 'all',
+  ): Promise<FloorCirculationHeatmapResponse> {
+    return this.floorPlanService.getCirculationHeatmap(
+      orgId,
+      libraryId,
+      floorId,
+      timeRange || '30d',
+    );
   }
 
   // ==========================================

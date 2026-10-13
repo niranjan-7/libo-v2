@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -19,6 +20,7 @@ import {
   CreateLibraryDto,
   InviteMemberDto,
   AcceptInviteDto,
+  UpdateMemberAccessDto,
 } from './dto/organization.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OrgRoleGuard } from '../../common/guards/org-role.guard';
@@ -80,6 +82,18 @@ export class OrganizationsController {
   @UseGuards(OrgRoleGuard)
   async getMembers(@Param('orgId') orgId: string) {
     return this.orgService.getMembers(orgId);
+  }
+
+  @Patch(':orgId/members/:targetUserId')
+  @UseGuards(OrgRoleGuard)
+  @RequireOrgRole(OrgRole.OWNER, OrgRole.ADMIN)
+  async updateMemberAccess(
+    @Param('orgId') orgId: string,
+    @Param('targetUserId') targetUserId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateMemberAccessDto,
+  ) {
+    return this.orgService.updateMemberAccess(orgId, user.userId, targetUserId, dto);
   }
 
   @Get(':orgId/invitations')

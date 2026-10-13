@@ -19,7 +19,7 @@ export const COLOR_SWATCHES: ColorSwatch[] = [
     accent: '#235640',
     accentStrong: '#173e2d',
     accentSoft: '#e8f2eb',
-    accentSoftDark: '#263e2e',
+    accentSoftDark: '#162e22',
   },
   {
     id: 'blue',

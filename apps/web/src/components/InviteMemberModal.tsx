@@ -9,9 +9,9 @@ interface Props {
 }
 
 export const InviteMemberModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { currentOrg, inviteMember } = useAuth();
+  const { currentOrg, currentRole, inviteMember } = useAuth();
   const [email, setEmail] = useState('');
-  const [proposedRole, setProposedRole] = useState<OrgRole>(OrgRole.MEMBER);
+  const [proposedRole, setProposedRole] = useState<OrgRole | 'LIBRARIAN'>('LIBRARIAN');
   const [targetLibraryId, setTargetLibraryId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -284,7 +284,7 @@ export const InviteMemberModal: React.FC<Props> = ({ isOpen, onClose }) => {
               </label>
               <select
                 value={proposedRole}
-                onChange={(e) => setProposedRole(e.target.value as OrgRole)}
+                onChange={(e) => setProposedRole(e.target.value as OrgRole | 'LIBRARIAN')}
                 disabled={isSubmitting}
                 style={{
                   width: '100%',
@@ -295,8 +295,11 @@ export const InviteMemberModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   color: 'var(--text)',
                 }}
               >
+                {currentRole === OrgRole.OWNER && (
+                  <option value={OrgRole.ADMIN}>Admin (Branch Management & Circulation)</option>
+                )}
+                <option value="LIBRARIAN">Librarian (Desk Staff & Catalog Access)</option>
                 <option value={OrgRole.MEMBER}>Member (Reader Access)</option>
-                <option value={OrgRole.ADMIN}>Admin (Branch Management & Circulation)</option>
               </select>
             </div>
 

@@ -17,6 +17,8 @@ import { FinesModule } from './modules/fines/fines.module';
 import { BackgroundJobsModule } from './modules/jobs/background-jobs.module';
 import { CommunityModule } from './modules/community/community.module';
 import { FloorPlanModule } from './modules/floor-plan/floor-plan.module';
+import { LibrariesModule } from './modules/libraries/libraries.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { FloorPlanModule } from './modules/floor-plan/floor-plan.module';
     TenantConnectionModule,
     AuthModule,
     OrganizationsModule,
+    LibrariesModule,
     CatalogModule,
     CirculationModule,
     AuditModule,
@@ -44,5 +47,6 @@ import { FloorPlanModule } from './modules/floor-plan/floor-plan.module';
     FloorPlanModule,
     HealthModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}

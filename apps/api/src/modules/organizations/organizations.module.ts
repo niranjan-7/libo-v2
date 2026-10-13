@@ -5,6 +5,7 @@ import { OrgMembershipEntity } from '../../database/control-plane/entities/org-m
 import { OrgInvitationEntity } from '../../database/control-plane/entities/org-invitation.entity';
 import { UserEntity } from '../../database/control-plane/entities/user.entity';
 import { ControlPlaneAuditLogEntity } from '../../database/control-plane/entities/control-plane-audit.entity';
+import { LibraryDirectoryEntity } from '../../database/control-plane/entities/library-directory.entity';
 import { OrganizationsService } from './organizations.service';
 import { OrganizationsController } from './organizations.controller';
 import { InvitationsController } from './invitations.controller';
@@ -20,6 +21,7 @@ import { ControlPlaneModule } from '../control-plane/control-plane.module';
       OrgInvitationEntity,
       UserEntity,
       ControlPlaneAuditLogEntity,
+      LibraryDirectoryEntity,
     ]),
     ControlPlaneModule,
     TenantConnectionModule,

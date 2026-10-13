@@ -8,6 +8,7 @@ import { OrgMembershipEntity } from '../control-plane/entities/org-membership.en
 import { OrgInvitationEntity } from '../control-plane/entities/org-invitation.entity';
 import { TenantDatabaseRegistryEntity } from '../control-plane/entities/tenant-registry.entity';
 import { ControlPlaneAuditLogEntity } from '../control-plane/entities/control-plane-audit.entity';
+import { LibraryDirectoryEntity } from '../control-plane/entities/library-directory.entity';
 import { TenantDatabaseRegistryService } from '../../modules/control-plane/tenant-database-registry.service';
 import { TenantConnectionService } from '../../modules/tenant-connection/tenant-connection.service';
 import { AuthService } from '../../modules/auth/auth.service';
@@ -33,6 +34,7 @@ async function seed() {
       OrgInvitationEntity,
       TenantDatabaseRegistryEntity,
       ControlPlaneAuditLogEntity,
+      LibraryDirectoryEntity,
     ],
     synchronize: false,
     logging: false,
@@ -54,6 +56,7 @@ async function seed() {
   const inviteRepo = controlPlaneDs.getRepository(OrgInvitationEntity);
   const registryRepo = controlPlaneDs.getRepository(TenantDatabaseRegistryEntity);
   const auditRepo = controlPlaneDs.getRepository(ControlPlaneAuditLogEntity);
+  const libDirRepo = controlPlaneDs.getRepository(LibraryDirectoryEntity);
 
   const registryService = new TenantDatabaseRegistryService(registryRepo, controlPlaneDs, configService);
   const connectionService = new TenantConnectionService(configService, registryService);
@@ -66,6 +69,7 @@ async function seed() {
     auditRepo,
     registryService,
     connectionService,
+    libDirRepo,
   );
   const catalogService = new CatalogService(connectionService);
 

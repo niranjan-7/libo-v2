@@ -14,6 +14,7 @@ import {
   CreateLibraryRequest,
   InviteMemberRequest,
   AcceptInviteRequest,
+  UpdateMemberAccessRequest,
 } from '@library/contracts';
 
 export class CreateOrganizationDto implements CreateOrganizationRequest {
@@ -59,8 +60,9 @@ export class InviteMemberDto implements InviteMemberRequest {
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim().toLowerCase() : value)
   email!: string;
 
-  @IsEnum(OrgRole, { message: 'Proposed role must be OWNER, ADMIN, or MEMBER' })
-  proposedRole!: OrgRole;
+  @IsString()
+  @IsNotEmpty({ message: 'Proposed role must be ADMIN, LIBRARIAN, or MEMBER' })
+  proposedRole!: OrgRole | 'LIBRARIAN';
 
   @IsOptional()
   @IsString()
@@ -71,4 +73,18 @@ export class AcceptInviteDto implements AcceptInviteRequest {
   @IsString()
   @IsNotEmpty({ message: 'Invitation token is required' })
   token!: string;
+}
+
+export class UpdateMemberAccessDto implements UpdateMemberAccessRequest {
+  @IsOptional()
+  @IsString()
+  role?: OrgRole | 'LIBRARIAN' | 'READER';
+
+  @IsOptional()
+  @IsString()
+  status?: 'ACTIVE' | 'SUSPENDED';
+
+  @IsOptional()
+  @IsString()
+  targetLibraryId?: string;
 }

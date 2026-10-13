@@ -13,6 +13,8 @@ import {
   BookCopyDto,
   InventoryStatsResponse,
   FloorPlanResponse,
+  FloorCirculationHeatmapResponse,
+  RackCirculationHeatmapDto,
   RackDetailResponse,
   LibraryFloorDto,
   CreateFloorRequest,
@@ -57,6 +59,13 @@ import {
   AwardBadgeRequest,
   SharedCollectionResponse,
   SharedReviewResponse,
+  LibraryDirectoryEntryDto,
+  ReaderAccessRequestDto,
+  CreateAccessRequestRequest,
+  ReviewAccessRequestRequest,
+  UserLibraryMembershipDto,
+  OrganizationMemberDto,
+  UpdateMemberAccessRequest,
 } from '@library/contracts';
 
 const API_BASE = '/api/v1';
@@ -151,17 +160,18 @@ export const api = {
         body: JSON.stringify(body),
       });
     },
-    getMembers: async (
+    getMembers: async (orgId: string): Promise<OrganizationMemberDto[]> => {
+      return request<OrganizationMemberDto[]>(`/organizations/${orgId}/members`);
+    },
+    updateMemberAccess: async (
       orgId: string,
-    ): Promise<Array<{
-      userId: string;
-      email: string;
-      displayName: string;
-      role: string;
-      status: string;
-      joinedAt: string;
-    }>> => {
-      return request(`/organizations/${orgId}/members`);
+      targetUserId: string,
+      body: UpdateMemberAccessRequest,
+    ): Promise<{ success: boolean; userId: string; role: string; status: string }> => {
+      return request(`/organizations/${orgId}/members/${targetUserId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
     },
     getInvitations: async (
       orgId: string,
@@ -305,6 +315,16 @@ export const api = {
         return request<FloorPlanResponse>(`/organizations/${orgId}/libraries/${libraryId}/floors/published-level/${floorIdOrNumber}`);
       }
       return request<FloorPlanResponse>(`/organizations/${orgId}/libraries/${libraryId}/floors/${floorIdOrNumber}/published`);
+    },
+    getCirculationHeatmap: async (
+      orgId: string,
+      libraryId: string,
+      floorId: string,
+      timeRange: '30d' | '90d' | 'all' = '30d',
+    ): Promise<FloorCirculationHeatmapResponse> => {
+      return request<FloorCirculationHeatmapResponse>(
+        `/organizations/${orgId}/libraries/${libraryId}/floors/${floorId}/heatmap?timeRange=${timeRange}`,
+      );
     },
     getFloorPlan: async (
       orgId: string,
@@ -832,6 +852,49 @@ export const api = {
       reviewId: string,
     ): Promise<SharedReviewResponse> => {
       return request(`/organizations/${orgId}/community/deep-link/review/${reviewId}`);
+    },
+  },
+  libraries: {
+    getDirectory: async (): Promise<LibraryDirectoryEntryDto[]> => {
+      return request('/libraries/directory');
+    },
+    getMyLibraries: async (): Promise<UserLibraryMembershipDto[]> => {
+      return request('/libraries/me');
+    },
+    submitAccessRequest: async (
+      libraryId: string,
+      body: CreateAccessRequestRequest,
+    ): Promise<ReaderAccessRequestDto> => {
+      return request(`/libraries/${libraryId}/access-requests`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+    getAccessRequests: async (
+      orgId: string,
+      libraryId: string,
+    ): Promise<ReaderAccessRequestDto[]> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/access-requests`);
+    },
+    approveAccessRequest: async (
+      orgId: string,
+      libraryId: string,
+      requestId: string,
+    ): Promise<ReaderAccessRequestDto> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/access-requests/${requestId}/approve`, {
+        method: 'POST',
+      });
+    },
+    rejectAccessRequest: async (
+      orgId: string,
+      libraryId: string,
+      requestId: string,
+      body?: ReviewAccessRequestRequest,
+    ): Promise<ReaderAccessRequestDto> => {
+      return request(`/organizations/${orgId}/libraries/${libraryId}/access-requests/${requestId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify(body || {}),
+      });
     },
   },
 };

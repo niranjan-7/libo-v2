@@ -7,6 +7,7 @@ import {
   CreateOrganizationRequest,
   CreateLibraryRequest,
   InviteMemberRequest,
+  UserLibraryMembershipDto,
 } from '@library/contracts';
 import { api } from '../api/client';
 
@@ -19,11 +20,15 @@ interface AuthContextType {
   currentOrg: OrganizationDetailsResponse | null;
   currentLibrary: LibraryDto | null;
   currentRole: OrgRole | null;
+  myLibraries: UserLibraryMembershipDto[];
+  activeLibrary: UserLibraryMembershipDto | null;
+  isReaderOnly: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   selectOrganization: (orgId: string) => void;
   selectLibrary: (libraryId: string) => void;
+  selectActiveLibrary: (libraryId: string) => void;
   refreshData: () => Promise<void>;
   createOrganization: (data: CreateOrganizationRequest) => Promise<OrganizationDetailsResponse>;
   createLibrary: (data: CreateLibraryRequest) => Promise<LibraryDto>;
@@ -39,6 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [organizations, setOrganizations] = useState<OrganizationDetailsResponse[]>([]);
+  const [myLibraries, setMyLibraries] = useState<UserLibraryMembershipDto[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(() => localStorage.getItem('active_org_id'));
   const [selectedLibId, setSelectedLibId] = useState<string | null>(() => localStorage.getItem('active_lib_id'));
 
@@ -52,7 +58,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const orgsList = await api.organizations.getAll();
       setOrganizations(orgsList);
 
-      if (orgsList.length > 0) {
+      let myLibsList: UserLibraryMembershipDto[] = [];
+      try {
+        myLibsList = await api.libraries.getMyLibraries();
+        setMyLibraries(myLibsList);
+      } catch {
+        myLibsList = [];
+        setMyLibraries([]);
+      }
+
+      if (myLibsList.length > 0) {
+        // If reader or staff has active libraries, ensure active selection
+        const foundActiveLib = myLibsList.find((l) => l.libraryId === selectedLibId) || myLibsList[0];
+        setSelectedLibId(foundActiveLib.libraryId);
+        setSelectedOrgId(foundActiveLib.organizationId);
+        localStorage.setItem('active_lib_id', foundActiveLib.libraryId);
+        localStorage.setItem('active_org_id', foundActiveLib.organizationId);
+      } else if (orgsList.length > 0) {
         // Select either previously selected org or the first org
         const foundOrg = orgsList.find((o) => o.organization.organizationId === selectedOrgId) || orgsList[0];
         setSelectedOrgId(foundOrg.organization.organizationId);
@@ -77,6 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // User is not authenticated or session expired
       setUser(null);
       setOrganizations([]);
+      setMyLibraries([]);
       setSelectedOrgId(null);
       setSelectedLibId(null);
       localStorage.removeItem('auth_token');
@@ -126,6 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setUser(null);
       setOrganizations([]);
+      setMyLibraries([]);
       setSelectedOrgId(null);
       setSelectedLibId(null);
       setIsLoading(false);
@@ -150,6 +174,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const selectLibrary = (libraryId: string) => {
+    setSelectedLibId(libraryId);
+    localStorage.setItem('active_lib_id', libraryId);
+  };
+
+  const selectActiveLibrary = (libraryId: string) => {
+    // 1. Check in myLibraries (reader/librarian memberships)
+    const lib = myLibraries.find((l) => l.libraryId === libraryId);
+    if (lib) {
+      setSelectedOrgId(lib.organizationId);
+      setSelectedLibId(lib.libraryId);
+      localStorage.setItem('active_org_id', lib.organizationId);
+      localStorage.setItem('active_lib_id', lib.libraryId);
+      return;
+    }
+
+    // 2. Check in organizations (Owner/Admin of the organization owning this library)
+    for (const org of organizations) {
+      const match = org.libraries.find((l) => l.libraryId === libraryId);
+      if (match) {
+        setSelectedOrgId(org.organization.organizationId);
+        setSelectedLibId(match.libraryId);
+        localStorage.setItem('active_org_id', org.organization.organizationId);
+        localStorage.setItem('active_lib_id', match.libraryId);
+        return;
+      }
+    }
+
+    // 3. Fallback: just set library ID
     setSelectedLibId(libraryId);
     localStorage.setItem('active_lib_id', libraryId);
   };
@@ -204,9 +256,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const currentOrg = organizations.find((o) => o.organization.organizationId === selectedOrgId) || null;
-  const currentLibrary = currentOrg?.libraries.find((l) => l.libraryId === selectedLibId) || currentOrg?.libraries[0] || null;
+  // Match organization by selectedLibId, or by selectedOrgId
+  const currentOrg =
+    (selectedLibId
+      ? organizations.find((o) => o.libraries.some((l) => l.libraryId === selectedLibId))
+      : null) ||
+    organizations.find((o) => o.organization.organizationId === selectedOrgId) ||
+    organizations[0] ||
+    null;
+
+  const currentLibrary =
+    currentOrg?.libraries.find((l) => l.libraryId === selectedLibId) ||
+    currentOrg?.libraries[0] ||
+    null;
+
   const currentRole = currentOrg?.role || null;
+
+  const activeLibrary =
+    myLibraries.find((l) => l.libraryId === selectedLibId) ||
+    (currentOrg && currentLibrary
+      ? {
+          libraryId: currentLibrary.libraryId,
+          libraryName: currentLibrary.name,
+          librarySlug: currentLibrary.slug,
+          organizationId: currentOrg.organization.organizationId,
+          organizationName: currentOrg.organization.name,
+          organizationSlug: currentOrg.organization.slug,
+          role: (currentRole === OrgRole.OWNER
+            ? 'OWNER'
+            : currentRole === OrgRole.ADMIN
+            ? 'ADMIN'
+            : 'READER') as 'OWNER' | 'ADMIN' | 'LIBRARIAN' | 'READER',
+          status: 'ACTIVE' as const,
+          joinedAt: new Date().toISOString(),
+        }
+      : null) ||
+    myLibraries[0] ||
+    null;
+
+  const isReaderOnly =
+    (organizations.length > 0 && organizations.every((o) => o.role === OrgRole.MEMBER)) ||
+    (organizations.length === 0 && myLibraries.length > 0) ||
+    (organizations.length === 0 && myLibraries.length === 0);
 
   return (
     <AuthContext.Provider
@@ -219,11 +310,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentOrg,
         currentLibrary,
         currentRole,
+        myLibraries,
+        activeLibrary,
+        isReaderOnly,
         login,
         register,
         logout,
         selectOrganization,
         selectLibrary,
+        selectActiveLibrary,
         refreshData,
         createOrganization,
         createLibrary,

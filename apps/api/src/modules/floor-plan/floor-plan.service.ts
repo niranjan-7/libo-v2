@@ -18,6 +18,8 @@ import {
   PublishFloorPlanResponse,
   LogicalRackDto,
   FloorPlanResponse,
+  FloorCirculationHeatmapResponse,
+  RackCirculationHeatmapDto,
 } from '@library/contracts';
 import {
   CreateFloorDto,
@@ -897,5 +899,130 @@ export class FloorPlanService {
       shelfCount: parseInt(r.shelfCount || '0', 10),
       totalCopiesCount: parseInt(r.totalCopiesCount || '0', 10),
     }));
+  }
+
+  /**
+   * Aggregates circulation heatmap metrics across all physical racks on a floor level.
+   */
+  async getCirculationHeatmap(
+    organizationId: string,
+    libraryId: string,
+    floorId: string,
+    timeRange: '30d' | '90d' | 'all' = '30d',
+  ): Promise<FloorCirculationHeatmapResponse> {
+    const tenantDs = await this.tenantConnectionService.getTenantConnection(organizationId);
+    const floor = await this.getFloor(organizationId, libraryId, floorId);
+
+    // Build time interval condition
+    let timeClause = '';
+    if (timeRange === '30d') {
+      timeClause = `AND ln.checked_out_at >= NOW() - INTERVAL '30 days'`;
+    } else if (timeRange === '90d') {
+      timeClause = `AND ln.checked_out_at >= NOW() - INTERVAL '90 days'`;
+    }
+
+    // 1. Query all racks on this floor with total loans, active loans, and total copies
+    const query = `
+      SELECT
+        r.location_id as "locationId",
+        r.code as "rackCode",
+        r.name as "rackName",
+        COALESCE(SUM(CASE WHEN ln.loan_id IS NOT NULL THEN 1 ELSE 0 END), 0)::int as "totalLoans",
+        COALESCE(SUM(CASE WHEN ln.status = 'ACTIVE' THEN 1 ELSE 0 END), 0)::int as "activeLoans",
+        COUNT(DISTINCT bc.copy_id)::int as "totalCopies"
+      FROM "locations" r
+      LEFT JOIN "locations" shelf ON shelf.parent_location_id = r.location_id AND shelf.location_type = 'SHELF'
+      LEFT JOIN "book_copies" bc ON bc.home_location_id = shelf.location_id AND bc.library_id = $1
+      LEFT JOIN "loans" ln ON ln.copy_id = bc.copy_id AND ln.library_id = $1 ${timeClause}
+      WHERE r.library_id = $1 AND r.floor_id = $2 AND r.location_type = 'RACK'
+      GROUP BY r.location_id, r.code, r.name
+      ORDER BY "totalLoans" DESC, r.code ASC
+    `;
+
+    const rows = await tenantDs.query(query, [libraryId, floorId]);
+
+    // 2. Query top genre and book title per rack
+    const topMetadataQuery = `
+      WITH ranked_metadata AS (
+        SELECT
+          r.location_id,
+          cat.name as "genreName",
+          b.title as "bookTitle",
+          COUNT(ln.loan_id) as "loanCount",
+          ROW_NUMBER() OVER (PARTITION BY r.location_id ORDER BY COUNT(ln.loan_id) DESC) as rn
+        FROM "locations" r
+        JOIN "locations" shelf ON shelf.parent_location_id = r.location_id AND shelf.location_type = 'SHELF'
+        JOIN "book_copies" bc ON bc.home_location_id = shelf.location_id AND bc.library_id = $1
+        JOIN "loans" ln ON ln.copy_id = bc.copy_id AND ln.library_id = $1 ${timeClause}
+        JOIN "editions" ed ON ed.edition_id = bc.edition_id
+        JOIN "books" b ON b.book_id = ed.book_id
+        LEFT JOIN "categories" cat ON cat.category_id = ed.category_id
+        WHERE r.library_id = $1 AND r.floor_id = $2 AND r.location_type = 'RACK'
+        GROUP BY r.location_id, cat.name, b.title
+      )
+      SELECT location_id, "genreName", "bookTitle"
+      FROM ranked_metadata
+      WHERE rn = 1
+    `;
+
+    const topMetadataMap: Record<string, { topGenre?: string; topBookTitle?: string }> = {};
+    try {
+      const topMetaRows = await tenantDs.query(topMetadataQuery, [libraryId, floorId]);
+      for (const m of topMetaRows) {
+        topMetadataMap[m.location_id] = {
+          topGenre: m.genreName || undefined,
+          topBookTitle: m.bookTitle || undefined,
+        };
+      }
+    } catch {
+      // Non-fatal if categories or joins return empty
+    }
+
+    let maxLoans = 0;
+    let totalFloorLoans = 0;
+    let peakRackCode: string | undefined;
+
+    const parsedRacks = rows.map((r: any) => {
+      const totalLoans = parseInt(r.totalLoans || '0', 10);
+      const activeLoans = parseInt(r.activeLoans || '0', 10);
+      const totalCopies = parseInt(r.totalCopies || '0', 10);
+      const turnoverRate = totalCopies > 0 ? parseFloat((totalLoans / totalCopies).toFixed(2)) : 0;
+      const cleanRackCode = r.rackCode.replace(/^F\d+-R?/, '');
+
+      totalFloorLoans += totalLoans;
+      if (totalLoans > maxLoans) {
+        maxLoans = totalLoans;
+        peakRackCode = cleanRackCode;
+      }
+
+      return {
+        locationId: r.locationId,
+        rackCode: cleanRackCode,
+        rackName: r.rackName,
+        totalLoans,
+        activeLoans,
+        totalCopies,
+        turnoverRate,
+        heatScore: 0,
+        topGenre: topMetadataMap[r.locationId]?.topGenre,
+        topBookTitle: topMetadataMap[r.locationId]?.topBookTitle,
+      };
+    });
+
+    const racks: RackCirculationHeatmapDto[] = parsedRacks.map((pr: any) => ({
+      ...pr,
+      heatScore: maxLoans > 0 ? parseFloat((pr.totalLoans / maxLoans).toFixed(2)) : 0,
+    }));
+
+    return {
+      floorId,
+      floorName: floor.name,
+      floorNumber: floor.floorNumber,
+      timeRange,
+      totalFloorLoans,
+      peakRackCode: maxLoans > 0 ? peakRackCode : undefined,
+      peakLoanCount: maxLoans,
+      racks,
+    };
   }
 }

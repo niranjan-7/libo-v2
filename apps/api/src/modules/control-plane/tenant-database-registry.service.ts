@@ -4,6 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { TenantDatabaseRegistryEntity } from '../../database/control-plane/entities/tenant-registry.entity';
 import { InitialTenantSchema1700000000001 } from '../../database/tenant/migrations/1700000000001-InitialTenantSchema';
+import { CreateReaderAccessRequests1700000000002 } from '../../database/tenant/migrations/1700000000002-CreateReaderAccessRequests';
 
 @Injectable()
 export class TenantDatabaseRegistryService {
@@ -58,7 +59,7 @@ export class TenantDatabaseRegistryService {
       username,
       password,
       database: databaseName,
-      migrations: [InitialTenantSchema1700000000001],
+      migrations: [InitialTenantSchema1700000000001, CreateReaderAccessRequests1700000000002],
       synchronize: false,
       logging: false,
     });

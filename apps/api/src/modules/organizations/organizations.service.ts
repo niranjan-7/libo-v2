@@ -5,6 +5,7 @@ import {
   ConflictException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -14,18 +15,21 @@ import {
   OrganizationDto,
   LibraryDto,
   OrganizationDetailsResponse,
+  OrganizationMemberDto,
 } from '@library/contracts';
 import { OrganizationEntity } from '../../database/control-plane/entities/organization.entity';
 import { OrgMembershipEntity } from '../../database/control-plane/entities/org-membership.entity';
 import { OrgInvitationEntity } from '../../database/control-plane/entities/org-invitation.entity';
 import { UserEntity } from '../../database/control-plane/entities/user.entity';
 import { ControlPlaneAuditLogEntity } from '../../database/control-plane/entities/control-plane-audit.entity';
+import { LibraryDirectoryEntity } from '../../database/control-plane/entities/library-directory.entity';
 import { TenantDatabaseRegistryService } from '../control-plane/tenant-database-registry.service';
 import { TenantConnectionService } from '../tenant-connection/tenant-connection.service';
 import {
   CreateOrganizationDto,
   CreateLibraryDto,
   InviteMemberDto,
+  UpdateMemberAccessDto,
 } from './dto/organization.dto';
 
 @Injectable()
@@ -45,6 +49,9 @@ export class OrganizationsService {
     private readonly auditRepo: Repository<ControlPlaneAuditLogEntity>,
     private readonly registryService: TenantDatabaseRegistryService,
     private readonly tenantConnectionService: TenantConnectionService,
+    @Optional()
+    @InjectRepository(LibraryDirectoryEntity)
+    private readonly libDirRepo?: Repository<LibraryDirectoryEntity>,
   ) {}
 
   /**
@@ -114,7 +121,25 @@ export class OrganizationsService {
       [userId, user.display_name || user.email],
     );
 
-    // 7. Audit log
+    // 7. Sync initial library to central directory for discovery
+    if (this.libDirRepo) {
+      try {
+        await this.libDirRepo.save(
+          this.libDirRepo.create({
+            library_id: createdLibrary.library_id,
+            organization_id: savedOrg.organization_id,
+            name: createdLibrary.name,
+            slug: createdLibrary.slug,
+            timezone: createdLibrary.timezone || timezone,
+            status: 'ACTIVE',
+          }),
+        );
+      } catch (err: any) {
+        this.logger.warn(`Failed to sync library directory on org creation: ${err.message}`);
+      }
+    }
+
+    // 8. Audit log
     await this.auditRepo.save(
       this.auditRepo.create({
         organization_id: savedOrg.organization_id,
@@ -233,6 +258,24 @@ export class OrganizationsService {
         [newLib.library_id, userId],
       );
 
+      // Sync library to central directory for discovery
+      if (this.libDirRepo) {
+        try {
+          await this.libDirRepo.save(
+            this.libDirRepo.create({
+              library_id: newLib.library_id,
+              organization_id: organizationId,
+              name: newLib.name,
+              slug: newLib.slug,
+              timezone: newLib.timezone || timezone,
+              status: 'ACTIVE',
+            }),
+          );
+        } catch (err: any) {
+          this.logger.warn(`Failed to sync library directory on library creation: ${err.message}`);
+        }
+      }
+
       // Control plane audit log
       await this.auditRepo.save(
         this.auditRepo.create({
@@ -264,7 +307,26 @@ export class OrganizationsService {
     actorUserId: string,
     dto: InviteMemberDto,
   ) {
-    // Check if target is already a member
+    // 1. Role hierarchy check
+    const actorMembership = await this.membershipRepo.findOne({
+      where: { organization_id: organizationId, user_id: actorUserId },
+    });
+    if (!actorMembership) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+
+    if (actorMembership.role === OrgRole.OWNER) {
+      // Owner can invite ADMIN, LIBRARIAN, MEMBER
+    } else if (actorMembership.role === OrgRole.ADMIN) {
+      // Admin can invite LIBRARIAN or MEMBER, but CANNOT invite ADMIN or OWNER
+      if (dto.proposedRole === OrgRole.ADMIN || (dto.proposedRole as string) === OrgRole.OWNER) {
+        throw new ForbiddenException('Administrators cannot invite other Administrators or Owners');
+      }
+    } else {
+      throw new ForbiddenException('Only Owners and Administrators can invite staff members');
+    }
+
+    // 2. Check if target is already a member
     const targetUser = await this.userRepo.findOne({ where: { email: dto.email } });
     if (targetUser) {
       const existing = await this.membershipRepo.findOne({
@@ -275,7 +337,7 @@ export class OrganizationsService {
       }
     }
 
-    // Generate secure random invite token
+    // 3. Generate secure random invite token
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -283,7 +345,7 @@ export class OrganizationsService {
     const invitation = this.inviteRepo.create({
       organization_id: organizationId,
       email: dto.email,
-      proposed_role: dto.proposedRole,
+      proposed_role: (dto.proposedRole === 'LIBRARIAN' ? OrgRole.MEMBER : dto.proposedRole) as OrgRole,
       target_library_id: dto.targetLibraryId || null,
       token_hash: tokenHash,
       expires_at: expiresAt,
@@ -306,7 +368,7 @@ export class OrganizationsService {
     return {
       invitationId: saved.invitation_id,
       email: saved.email,
-      proposedRole: saved.proposed_role,
+      proposedRole: dto.proposedRole,
       token: rawToken, // Caller receives token to share
       expiresAt: saved.expires_at.toISOString(),
     };
@@ -351,10 +413,11 @@ export class OrganizationsService {
     });
 
     if (!membership) {
+      const assignedRole = (invite.proposed_role === ('LIBRARIAN' as any) ? OrgRole.MEMBER : invite.proposed_role) as OrgRole;
       membership = this.membershipRepo.create({
         organization_id: invite.organization_id,
         user_id: userId,
-        role: invite.proposed_role,
+        role: assignedRole,
         status: 'ACTIVE',
       });
       await this.membershipRepo.save(membership);
@@ -366,16 +429,20 @@ export class OrganizationsService {
       await tenantDs.query(
         `INSERT INTO "reader_profiles" ("user_id", "display_name")
          VALUES ($1, $2)
-         ON CONFLICT ("user_id") DO NOTHING`,
+         ON CONFLICT ("user_id") DO UPDATE SET "display_name" = EXCLUDED."display_name"`,
         [userId, user.display_name || user.email],
       );
 
       if (invite.target_library_id) {
+        const libraryRole = (invite.proposed_role === OrgRole.ADMIN || (invite.proposed_role as string) === 'LIBRARIAN')
+          ? 'LIBRARIAN'
+          : 'READER';
+
         await tenantDs.query(
           `INSERT INTO "library_memberships" ("library_id", "user_id", "role", "status")
-           VALUES ($1, $2, 'READER', 'ACTIVE')
-           ON CONFLICT DO NOTHING`,
-          [invite.target_library_id, userId],
+           VALUES ($1, $2, $3, 'ACTIVE')
+           ON CONFLICT ("library_id", "user_id") DO UPDATE SET "role" = EXCLUDED."role", "status" = 'ACTIVE'`,
+          [invite.target_library_id, userId, libraryRole],
         );
       }
     } catch (err) {
@@ -396,7 +463,7 @@ export class OrganizationsService {
   /**
    * Retrieves all members of an organization with user details.
    */
-  async getMembers(orgId: string) {
+  async getMembers(orgId: string): Promise<OrganizationMemberDto[]> {
     const members = await this.membershipRepo.find({
       where: { organization_id: orgId },
       order: { joined_at: 'ASC' },
@@ -407,17 +474,153 @@ export class OrganizationsService {
     const users = await this.userRepo.find({ where: { user_id: In(userIds) } });
     const userMap = new Map(users.map((u) => [u.user_id, u]));
 
+    // Query library memberships from tenant DB to annotate effective library role
+    const libRoleMap = new Map<string, { role: string; status: string }>();
+    try {
+      const tenantDs = await this.tenantConnectionService.getTenantConnection(orgId);
+      const rows = await tenantDs.query(
+        `SELECT "user_id", "role", "status" FROM "library_memberships"`,
+      );
+      for (const r of rows) {
+        libRoleMap.set(r.user_id, { role: r.role, status: r.status });
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not load tenant library memberships for members view: ${err.message}`);
+    }
+
     return members.map((m) => {
       const u = userMap.get(m.user_id);
+      const libInfo = libRoleMap.get(m.user_id);
+      const effectiveRole = m.role === OrgRole.OWNER
+        ? OrgRole.OWNER
+        : m.role === OrgRole.ADMIN
+        ? OrgRole.ADMIN
+        : libInfo?.role || OrgRole.MEMBER;
+
       return {
         userId: m.user_id,
         email: u?.email || '',
         displayName: u?.display_name || u?.email || 'User',
-        role: m.role,
+        role: effectiveRole,
+        libraryRole: libInfo?.role,
         status: m.status,
         joinedAt: m.joined_at.toISOString(),
       };
     });
+  }
+
+  /**
+   * Updates an existing member's role and/or status with role hierarchy gating.
+   * - OWNER: can update any member's role (ADMIN, LIBRARIAN, READER/MEMBER) and status (ACTIVE, SUSPENDED), but cannot modify self.
+   * - ADMIN: can promote/demote between LIBRARIAN and READER/MEMBER, and change status. Cannot modify OWNER or other ADMINs.
+   */
+  async updateMemberAccess(
+    orgId: string,
+    actorUserId: string,
+    targetUserId: string,
+    dto: UpdateMemberAccessDto,
+  ) {
+    if (actorUserId === targetUserId && dto.role && dto.role !== OrgRole.OWNER) {
+      throw new BadRequestException('You cannot demote or remove your own ownership/admin role');
+    }
+
+    // 1. Check actor's membership
+    const actorMembership = await this.membershipRepo.findOne({
+      where: { organization_id: orgId, user_id: actorUserId },
+    });
+    if (!actorMembership || (actorMembership.role !== OrgRole.OWNER && actorMembership.role !== OrgRole.ADMIN)) {
+      throw new ForbiddenException('Only Organization Owners and Admins can update member access');
+    }
+
+    // 2. Check target's membership
+    const targetMembership = await this.membershipRepo.findOne({
+      where: { organization_id: orgId, user_id: targetUserId },
+    });
+    if (!targetMembership) {
+      throw new NotFoundException('Target member not found in this organization');
+    }
+
+    // Role hierarchy gating:
+    if (actorMembership.role === OrgRole.ADMIN) {
+      if (targetMembership.role === OrgRole.OWNER) {
+        throw new ForbiddenException('Admins cannot modify the Organization Owner');
+      }
+      if (targetMembership.role === OrgRole.ADMIN && targetUserId !== actorUserId) {
+        throw new ForbiddenException('Admins cannot modify other Admins');
+      }
+      if (dto.role === OrgRole.ADMIN || dto.role === OrgRole.OWNER) {
+        throw new ForbiddenException('Admins cannot promote members to Admin or Owner');
+      }
+    }
+
+    const previousRole = targetMembership.role;
+    const previousStatus = targetMembership.status;
+
+    // 3. Update control-plane membership
+    if (dto.role) {
+      if (dto.role === OrgRole.ADMIN) {
+        targetMembership.role = OrgRole.ADMIN;
+      } else if (dto.role === 'LIBRARIAN' || dto.role === 'READER' || dto.role === OrgRole.MEMBER) {
+        targetMembership.role = OrgRole.MEMBER;
+      }
+    }
+    if (dto.status) {
+      targetMembership.status = dto.status;
+    }
+    await this.membershipRepo.save(targetMembership);
+
+    // 4. Update tenant database library_memberships
+    try {
+      const tenantDs = await this.tenantConnectionService.getTenantConnection(orgId);
+      const targetLibRole = dto.role === OrgRole.ADMIN
+        ? 'LIBRARIAN'
+        : dto.role === 'LIBRARIAN'
+        ? 'LIBRARIAN'
+        : 'READER';
+
+      if (dto.targetLibraryId) {
+        await tenantDs.query(
+          `UPDATE "library_memberships"
+           SET "role" = COALESCE($1, "role"),
+               "status" = COALESCE($2, "status")
+           WHERE "library_id" = $3 AND "user_id" = $4`,
+          [dto.role ? targetLibRole : null, dto.status || null, dto.targetLibraryId, targetUserId],
+        );
+      } else {
+        await tenantDs.query(
+          `UPDATE "library_memberships"
+           SET "role" = COALESCE($1, "role"),
+               "status" = COALESCE($2, "status")
+           WHERE "user_id" = $3`,
+          [dto.role ? targetLibRole : null, dto.status || null, targetUserId],
+        );
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not sync tenant library memberships: ${err.message}`);
+    }
+
+    // 5. Control-plane Audit Log
+    await this.auditRepo.save(
+      this.auditRepo.create({
+        organization_id: orgId,
+        actor_user_id: actorUserId,
+        action: 'MEMBER_ACCESS_UPDATED',
+        metadata: {
+          targetUserId,
+          previousRole,
+          newRole: dto.role || previousRole,
+          previousStatus,
+          newStatus: dto.status || previousStatus,
+        },
+      }),
+    );
+
+    return {
+      success: true,
+      userId: targetUserId,
+      role: dto.role || previousRole,
+      status: dto.status || previousStatus,
+    };
   }
 
   /**
