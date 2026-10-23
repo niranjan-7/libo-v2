@@ -35,6 +35,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronRight,
+  Code2,
 } from 'lucide-react';
 import { CreateOrgModal } from './CreateOrgModal';
 import { CreateLibraryModal } from './CreateLibraryModal';
@@ -42,6 +43,7 @@ import { InviteMemberModal } from './InviteMemberModal';
 import { AcceptInviteModal } from './AcceptInviteModal';
 import { AppearanceDrawer } from './theme/AppearanceDrawer';
 import { ComponentShowcase } from './showcase/ComponentShowcase';
+import { ApiExplorerScreen } from './api-docs/ApiExplorerScreen';
 import { BookCard, BookItem } from './ui/BookCard';
 import { CatalogScreen } from './catalog/CatalogScreen';
 import { BookDetailsScreen } from './catalog/BookDetailsScreen';
@@ -138,6 +140,7 @@ export const DashboardShell: React.FC = () => {
     | 'directory'
     | 'hub-libraries'
     | 'org-hub'
+    | 'api-docs'
   >(() => {
     const savedInside = localStorage.getItem('is_inside_library');
     return savedInside === 'false' ? 'hub-libraries' : 'catalog';
@@ -388,6 +391,7 @@ export const DashboardShell: React.FC = () => {
       case 'org-hub': return 'Organization Hub';
       case 'hub-libraries': return 'My Libraries';
       case 'showcase': return 'Component Showcase';
+      case 'api-docs': return 'API Documentation (Swagger)';
       default: return tab;
     }
   };
@@ -507,7 +511,25 @@ export const DashboardShell: React.FC = () => {
             </nav>
 
             {/* Sidebar Footer */}
-            <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
+            <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
+              <button
+                onClick={() => { setActiveTab('api-docs'); setIsMobileOpen(false); }}
+                className={`btn sm ${activeTab === 'api-docs' ? 'primary' : 'secondary'}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '7px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  marginBottom: '10px',
+                  width: '100%',
+                  borderRadius: '9px',
+                }}
+              >
+                <Code2 size={14} /> API Explorer (Swagger)
+              </button>
+
               <div style={{
                 background: 'var(--canvas)',
                 border: '1px solid var(--border)',
@@ -609,6 +631,20 @@ export const DashboardShell: React.FC = () => {
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Sparkles size={16} /> Component Showcase
+                </span>
+              </button>
+
+              <div className="section-label" style={{ marginTop: '10px' }}>Developer Tools</div>
+              <button
+                onClick={() => { setActiveTab('api-docs'); setIsMobileOpen(false); }}
+                className={`side-nav-item ${activeTab === 'api-docs' ? 'active' : ''}`}
+              >
+                <span className="nav-number">API</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                  <Code2 size={16} /> API Explorer (Swagger)
+                </span>
+                <span className="pill green" style={{ fontSize: '9px', padding: '1px 5px', fontWeight: 800 }}>
+                  v2.0
                 </span>
               </button>
             </nav>
@@ -779,6 +815,24 @@ export const DashboardShell: React.FC = () => {
             )}
           </button>
 
+          {/* API Explorer Quick Trigger */}
+          <button
+            onClick={() => setActiveTab('api-docs')}
+            className={`btn sm ${activeTab === 'api-docs' ? 'primary' : 'secondary'}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              fontWeight: 750,
+              padding: '6px 11px',
+              borderRadius: '8px',
+            }}
+            title="Open API Documentation & Interactive Swagger Explorer"
+          >
+            <Code2 size={13} /> APIs
+          </button>
+
           {/* Dark Mode Toggle */}
           <button
             onClick={toggleDarkMode}
@@ -811,7 +865,11 @@ export const DashboardShell: React.FC = () => {
 
         {/* Content Area */}
         <main className="app-content">
-          {!isInsideLibrary ? (
+          {activeTab === 'api-docs' ? (
+            <div className="tab-content-enter">
+              <ApiExplorerScreen />
+            </div>
+          ) : !isInsideLibrary ? (
             activeTab === 'directory' || (organizations.length === 0 && myLibraries.length === 0) ? (
               <div className="tab-content-enter">
                 <LibraryDirectoryScreen
